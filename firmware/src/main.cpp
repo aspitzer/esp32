@@ -6,6 +6,7 @@
 
 #include <Arduino.h>
 #include <esp_heap_caps.h>
+#include <lvgl.h>
 #include <esp_system.h>
 
 #include "agents.h"
@@ -37,10 +38,28 @@ static void logMem(const char *tag) {
   uint32_t chunks, pixels, spiMs;
   displayRenderStats(&chunks, &pixels, &spiMs);
 
+  // El pool de LVGL es aparte del heap del sistema y se agota en silencio:
+  // lv_malloc devuelve NULL y LVGL no lo comprueba, asi que revienta lejos
+  // de la causa. Aqui se ve venir.
+  //
+  // OJO: antes de lv_init() el pool mide 0 y lv_mem_monitor divide por su
+  // tamano -> IntegerDivideByZero. El primer logMem del arranque es anterior.
+  lv_mem_monitor_t lv = {};
+  const bool lvReady = lv_is_initialized();
+  if (lvReady) lv_mem_monitor(&lv);
+
   Serial.printf("[mem] %-16s free=%7u B (%3u KB)  largest=%7u B (%3u KB)  minEver=%7u B  fps=%u.%u%s\n",
                 tag, freeHeap, freeHeap / 1024, largest, largest / 1024,
                 ESP.getMinFreeHeap(), fps10 / 10, fps10 % 10,
                 largest < HEAP_FLOOR_BYTES ? "  <-- largest POR DEBAJO DEL SUELO" : "");
+  if (lvReady) {
+    Serial.printf("[lvgl] pool %u%% usado (%u de %u B)  frag=%u%%  mayor libre=%u B%s\n",
+                  (unsigned)lv.used_pct, (unsigned)(lv.total_size - lv.free_size),
+                  (unsigned)lv.total_size, (unsigned)lv.frag_pct,
+                  (unsigned)lv.free_biggest_size,
+                  lv.used_pct > 80 ? "  <-- SUBIR LV_MEM_SIZE" : "");
+  }
+
   if (elapsed) {
     Serial.printf("[gfx] frames=%u trozos=%u (%u/frame)  pixeles=%u  SPI=%u ms de %u ms (%u%%)\n",
                   frames, chunks, frames ? chunks / frames : 0, pixels, spiMs, elapsed,
