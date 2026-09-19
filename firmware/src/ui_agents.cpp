@@ -42,6 +42,9 @@ static lv_obj_t *detailScr;
 static lv_obj_t *dLabel, *dStatus, *dTool, *dDetail, *dMeta, *dError;
 static char      detailId[AG_ID_LEN] = {0};
 
+// --- pantalla de acciones (fase 4) -------------------------------------------
+static lv_obj_t *actionsScr, *lblActAgent, *lblActResult;
+
 static const Agent *agentById(const char *id) {
   if (!id || !*id) return nullptr;
   for (const auto &a : agents) {
@@ -211,6 +214,41 @@ static void buildRows() {
   }
 }
 
+/** Boton grande con borde de color. Todos los targets tactiles pasan por aqui. */
+static lv_obj_t *mkBigButton(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
+                             lv_coord_t w, lv_coord_t h, const char *text,
+                             lv_color_t color, lv_event_cb_t cb, void *user) {
+  lv_obj_t *b = lv_obj_create(parent);
+  noPad(b);
+  lv_obj_set_size(b, w, h);
+  lv_obj_set_pos(b, x, y);
+  lv_obj_set_style_bg_color(b, C_PANEL, 0);
+  lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_color(b, color, 0);
+  lv_obj_set_style_border_width(b, 3, 0);
+  lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, user);
+
+  lv_obj_t *l = mkLabel(b, &lv_font_montserrat_20, color);
+  lv_label_set_text(l, text);
+  lv_obj_center(l);
+  return b;
+}
+
+static void showActions();
+static void actionsClicked(lv_event_t *) { showActions(); }
+
+/** El id de la accion viaja como user_data: es una constante de flash, no se copia. */
+static void actionFired(lv_event_t *e) {
+  const char *action = (const char *)lv_event_get_user_data(e);
+  if (!detailId[0]) return;
+  netSendAction(detailId, action);
+  setTextIfChanged(lblActResult, "enviado, esperando al broker...");
+  setColorIfChanged(lblActResult, C_DIM);
+}
+
+static void actionsBack(lv_event_t *) { lv_screen_load(detailScr); }
+
 static void buildDetail() {
   detailScr = lv_obj_create(nullptr);
   lv_obj_set_style_bg_color(detailScr, C_BG, 0);
@@ -245,22 +283,12 @@ static void buildDetail() {
   lv_obj_set_pos(dMeta, 14, 194);
   lv_obj_set_width(dMeta, SCREEN_W - 28);
 
-  // Boton de volver: 452x76, a 14 px de los bordes. La calibracion medida da
+  // Dos botones de 222x76 a 14 px de los bordes. La calibracion medida da
   // hasta 12 px de error en las esquinas, asi que nada pegado al borde.
-  lv_obj_t *back = lv_obj_create(detailScr);
-  noPad(back);
-  lv_obj_set_size(back, SCREEN_W - 28, 76);
-  lv_obj_set_pos(back, 14, SCREEN_H - 76 - 14);
-  lv_obj_set_style_bg_color(back, C_PANEL, 0);
-  lv_obj_set_style_bg_opa(back, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_color(back, C_EDGE, 0);
-  lv_obj_set_style_border_width(back, 3, 0);
-  lv_obj_add_flag(back, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_add_event_cb(back, backClicked, LV_EVENT_CLICKED, nullptr);
-
-  lv_obj_t *backTxt = mkLabel(back, &lv_font_montserrat_20, C_TXT);
-  lv_label_set_text(backTxt, "VOLVER");
-  lv_obj_center(backTxt);
+  mkBigButton(detailScr, 14,  SCREEN_H - 76 - 14, 222, 76, "ACCIONES",
+              lv_color_hex(0x4DA6FF), actionsClicked, nullptr);
+  mkBigButton(detailScr, 244, SCREEN_H - 76 - 14, 222, 76, "VOLVER",
+              C_EDGE, backClicked, nullptr);
 }
 
 static void refreshDetail() {
@@ -302,6 +330,45 @@ static void refreshDetail() {
   setTextIfChanged(dMeta, meta);
 }
 
+static void buildActions() {
+  actionsScr = lv_obj_create(nullptr);
+  lv_obj_set_style_bg_color(actionsScr, C_BG, 0);
+  lv_obj_set_style_bg_opa(actionsScr, LV_OPA_COVER, 0);
+  lv_obj_set_style_pad_all(actionsScr, 0, 0);
+  lv_obj_set_style_border_width(actionsScr, 0, 0);
+  lv_obj_clear_flag(actionsScr, LV_OBJ_FLAG_SCROLLABLE);
+
+  lblActAgent = mkLabel(actionsScr, &lv_font_montserrat_16, C_TXT);
+  lv_obj_set_pos(lblActAgent, 14, 6);
+
+  // 2x2 de 222x88: por encima del minimo de 100x80 del tactil resistivo.
+  mkBigButton(actionsScr, 14,  34,  222, 88, "CONTINUA", lv_color_hex(0x24D65F),
+              actionFired, (void *)"continue");
+  mkBigButton(actionsScr, 244, 34,  222, 88, "TESTS",    lv_color_hex(0x4DA6FF),
+              actionFired, (void *)"tests");
+  mkBigButton(actionsScr, 14,  130, 222, 88, "ESTADO",   lv_color_hex(0xB07CFF),
+              actionFired, (void *)"status");
+  mkBigButton(actionsScr, 244, 130, 222, 88, "PARAR",    lv_color_hex(0xFF4B4B),
+              actionFired, (void *)"interrupt");
+
+  lblActResult = mkLabel(actionsScr, &lv_font_montserrat_12, C_DIM);
+  lv_obj_set_pos(lblActResult, 14, 224);
+  lv_obj_set_width(lblActResult, SCREEN_W - 28);
+  lv_label_set_long_mode(lblActResult, LV_LABEL_LONG_DOT);
+
+  mkBigButton(actionsScr, 14, 246, SCREEN_W - 28, 64, "VOLVER", C_EDGE,
+              actionsBack, nullptr);
+}
+
+static void showActions() {
+  const Agent *a = agentById(detailId);
+  setTextIfChanged(lblActAgent, a ? a->label : detailId);
+  netClearActionResult();
+  setTextIfChanged(lblActResult, "PARAR solo funciona si la sesion corre en tmux");
+  setColorIfChanged(lblActResult, C_DIM);
+  lv_screen_load(actionsScr);
+}
+
 void uiAgentsCreate() {
   scr = lv_screen_active();
   lv_obj_set_style_bg_color(scr, C_BG, 0);
@@ -313,6 +380,7 @@ void uiAgentsCreate() {
   buildAvatar();
   buildRows();
   buildDetail();
+  buildActions();
 
   uiAgentsRefresh();
 }
@@ -444,5 +512,14 @@ void uiAgentsRefresh() {
 
 void uiAgentsTickSlow() {
   avatarTick();
+
+  // Resultado de la ultima accion, en cuanto lo publica el broker.
+  const char *r = netLastActionResult();
+  if (r && *r) {
+    setTextIfChanged(lblActResult, r);
+    setColorIfChanged(lblActResult, strncmp(r, "OK", 2) == 0 ? lv_color_hex(0x24D65F)
+                                                             : lv_color_hex(0xFFB020));
+  }
+
   uiAgentsRefresh();
 }
