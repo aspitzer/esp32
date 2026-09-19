@@ -1,5 +1,5 @@
 import mqtt, { type MqttClient } from "mqtt";
-import type { AgentState, PermRequest, PermResponse } from "./types.ts";
+import type { AgentState, ActionRequest, ActionResponse, PermRequest, PermResponse } from "./types.ts";
 
 const URL  = process.env.MQTT_URL  ?? "mqtt://127.0.0.1:1883";
 const USER = process.env.MQTT_USER;
@@ -18,6 +18,17 @@ const permHandlers: PermResponseHandler[] = [];
 
 export function onPermResponse(fn: PermResponseHandler) {
   permHandlers.push(fn);
+}
+
+type ActionHandler = (req: ActionRequest) => void;
+const actionHandlers: ActionHandler[] = [];
+
+export function onActionRequest(fn: ActionHandler) {
+  actionHandlers.push(fn);
+}
+
+export function publishActionResult(res: ActionResponse) {
+  client?.publish("claude/action/res", JSON.stringify(res), { qos: 1, retain: false });
 }
 
 /** ¿Hay al menos una placa viva? El broker solo enruta permisos si la hay. */
@@ -44,7 +55,7 @@ export function connect(): Promise<void> {
     client.on("connect", () => {
       console.log(`[mqtt] conectado a ${URL}`);
       client!.subscribe(
-        ["claude/perm/res", "claude/device/+/online", "claude/agents/+/state"],
+        ["claude/perm/res", "claude/action/req", "claude/device/+/online", "claude/agents/+/state"],
         { qos: 1 },
       );
       resolve();
@@ -69,6 +80,16 @@ export function connect(): Promise<void> {
           for (const fn of permHandlers) fn(res);
         } catch {
           console.error("[mqtt] perm/res con JSON invalido:", payload.toString());
+        }
+        return;
+      }
+
+      if (topic === "claude/action/req") {
+        try {
+          const req = JSON.parse(payload.toString()) as ActionRequest;
+          for (const fn of actionHandlers) fn(req);
+        } catch {
+          console.error("[mqtt] action/req con JSON invalido:", payload.toString());
         }
         return;
       }

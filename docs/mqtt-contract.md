@@ -1,4 +1,4 @@
-# Contrato MQTT — v1
+# Contrato MQTT — v2
 
 Interfaz estable entre `broker/` y `firmware/`. **Cambiarla implica cambiar los dos
 lados en el mismo commit y subir la versión de este documento.**
@@ -68,6 +68,43 @@ cuenta atrás con ese valor y descarta la petición al llegar a cero.
 
 `decision` ∈ `allow | deny`. `source` ∈ `device | timeout | fallback`.
 El broker ignora respuestas con un `requestId` que no tenga pendiente.
+
+**El broker no enruta todo a la placa.** Solo las peticiones cuyo riesgo llega a
+`PERM_MIN_RISK` (por defecto `high`). El resto se resuelve como `unspecified` al
+instante y sigue el flujo normal de permisos en el portátil. Sin este filtro la
+placa interrumpe por cada `Edit`, dejas de mirarla, y el proyecto ha fracasado.
+
+## 3b. Acciones de vuelta (fase 4)
+
+**Topic:** `claude/action/req` · **Sentido:** placa → broker · **Retained:** no
+
+```json
+{ "agentId": "sherpa-01", "action": "continue", "source": "device" }
+```
+
+`action` ∈ `continue | tests | status | interrupt`
+
+**El catálogo es cerrado.** El texto que se escribe en la sesión está en
+`broker/src/actions.ts`, nunca viaja por MQTT, y todo se ejecuta con argv sin
+shell. Un `action` desconocido se descarta en el broker. Un dispositivo
+comprometido en la LAN solo puede disparar una de esas cuatro frases, no
+comandos arbitrarios.
+
+El broker elige el camino por agente:
+
+| Situación | Camino | Efecto |
+|---|---|---|
+| La sesión corre en un panel de tmux con el mismo `cwd` | `tmux send-keys` | Escribe en la conversación viva |
+| No hay panel | `claude -p` | Proceso nuevo, **sin el contexto** de la conversación |
+| `interrupt` sin tmux | ninguno | Falla con detalle: no hay equivalente headless |
+
+**Respuesta:** `claude/action/res` · broker → placa · no retained
+
+```json
+{ "agentId": "sherpa-01", "action": "continue", "ok": true, "via": "tmux", "detail": "brain:0.1" }
+```
+
+`via` ∈ `tmux | claude-p | none`
 
 ## 4. Presencia
 

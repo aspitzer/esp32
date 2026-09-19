@@ -22,7 +22,18 @@ static bool     ntpStarted  = false;
 
 static char lwtTopic[64];
 
+static PermReq  perm = {};
+static void (*permCb)() = nullptr;
+static char actionResult[64] = {0};
+
 void netOnChange(void (*cb)()) { changeCb = cb; }
+void netOnPermission(void (*cb)()) { permCb = cb; }
+
+const PermReq *netPendingPerm() { return perm.active ? &perm : nullptr; }
+void netDropPerm() { perm.active = false; }
+
+const char *netLastActionResult() { return actionResult; }
+void netClearActionResult() { actionResult[0] = '\0'; }
 NetState netState() { return state; }
 int8_t   netRssi() { return WiFi.status() == WL_CONNECTED ? (int8_t)WiFi.RSSI() : 0; }
 uint8_t  netMqttAttempt() { return mqttAttempt; }
@@ -45,6 +56,39 @@ static void setState(NetState s) {
 // --- mensajes entrantes ------------------------------------------------------
 
 static void onMessage(char *topic, uint8_t *payload, unsigned int len) {
+  if (strcmp(topic, "claude/perm/req") == 0) {
+    StaticJsonDocument<384> doc;
+    if (deserializeJson(doc, payload, len)) {
+      Serial.println("[perm] JSON invalido");
+      return;
+    }
+    memset(&perm, 0, sizeof(perm));
+    strlcpy(perm.requestId, doc["requestId"] | "", PERM_ID_LEN);
+    strlcpy(perm.agentId,   doc["agentId"]   | "", sizeof(perm.agentId));
+    strlcpy(perm.tool,      doc["tool"]      | "", sizeof(perm.tool));
+    strlcpy(perm.summary,   doc["summary"]   | "", PERM_SUMMARY_LEN);
+    const char *r = doc["risk"] | "high";
+    perm.risk      = !strcmp(r, "low") ? RISK_LOW : (!strcmp(r, "medium") ? RISK_MEDIUM : RISK_HIGH);
+    perm.expiresAt = doc["expiresAt"] | 0;
+    perm.rxMillis  = millis();
+    perm.active    = perm.requestId[0] != '\0';
+    Serial.printf("[perm] %s %s riesgo=%d: %s\n", perm.agentId, perm.tool, perm.risk, perm.summary);
+    if (perm.active && permCb) permCb();
+    return;
+  }
+
+  if (strcmp(topic, "claude/action/res") == 0) {
+    StaticJsonDocument<256> doc;
+    if (deserializeJson(doc, payload, len)) return;
+    const bool ok = doc["ok"] | false;
+    snprintf(actionResult, sizeof(actionResult), "%s %s \xC2\xB7 %s",
+             ok ? "OK" : "FALLO", (const char *)(doc["via"] | "?"),
+             (const char *)(doc["detail"] | ""));
+    Serial.printf("[act ] %s\n", actionResult);
+    notifyChange();
+    return;
+  }
+
   // claude/agents/<id>/state
   const char *p = strstr(topic, "claude/agents/");
   if (!p) return;
@@ -108,6 +152,8 @@ static void mqttConnect() {
   mqttBackoff = MQTT_RETRY_MIN_MS;
   mqtt.publish(lwtTopic, "1", true);
   mqtt.subscribe("claude/agents/+/state", 1);
+  mqtt.subscribe("claude/perm/req", 1);
+  mqtt.subscribe("claude/action/res", 1);
   Serial.printf("[mqtt] conectado a %s:%d como %s\n", MQTT_HOST, MQTT_PORT, clientId);
   setState(NET_MQTT_UP);
 }
@@ -126,6 +172,37 @@ void netInit() {
   mqtt.setKeepAlive(MQTT_KEEPALIVE);
 
   wifiNextTry = 0;
+}
+
+void netAnswerPerm(bool allow) {
+  if (!perm.active) return;
+
+  StaticJsonDocument<192> doc;
+  doc["requestId"] = perm.requestId;
+  doc["decision"]  = allow ? "allow" : "deny";
+  doc["source"]    = "device";
+
+  char buf[192];
+  const size_t n = serializeJson(doc, buf, sizeof(buf));
+  const bool sent = mqtt.publish("claude/perm/res", (const uint8_t *)buf, n, false);
+
+  Serial.printf("[perm] %s -> %s (%s)\n", perm.requestId, allow ? "allow" : "deny",
+                sent ? "enviado" : "FALLO AL ENVIAR");
+  perm.active = false;
+  notifyChange();
+}
+
+void netSendAction(const char *agentId, const char *action) {
+  StaticJsonDocument<160> doc;
+  doc["agentId"] = agentId;
+  doc["action"]  = action;
+  doc["source"]  = "device";
+
+  char buf[160];
+  const size_t n = serializeJson(doc, buf, sizeof(buf));
+  mqtt.publish("claude/action/req", (const uint8_t *)buf, n, false);
+  snprintf(actionResult, sizeof(actionResult), "enviando %s...", action);
+  Serial.printf("[act ] %s -> %s\n", agentId, action);
 }
 
 void netTick() {

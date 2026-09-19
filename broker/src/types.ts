@@ -28,6 +28,20 @@ export interface PermRequest {
   expiresAt: number;        // epoch en segundos
 }
 
+export interface ActionRequest {
+  agentId: string;
+  action: string;          // validado contra el catalogo cerrado de actions.ts
+  source?: string;
+}
+
+export interface ActionResponse {
+  agentId: string;
+  action: string;
+  ok: boolean;
+  via: string;
+  detail: string;
+}
+
 export interface PermResponse {
   requestId: string;
   decision: "allow" | "deny";

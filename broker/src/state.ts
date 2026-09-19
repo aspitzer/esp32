@@ -8,6 +8,17 @@ const OFFLINE_TTL_MS = 10 * 60 * 1000;
 const agents = new Map<string, AgentState>();
 const reapers = new Map<string, ReturnType<typeof setTimeout>>();
 
+/**
+ * cwd por agente. Se queda AQUI, no viaja en el payload MQTT: la placa no lo
+ * necesita y son bytes en un mensaje que vigilamos. Lo usa la fase 4 para
+ * localizar el panel de tmux o lanzar claude -p en el sitio correcto.
+ */
+const cwds = new Map<string, string>();
+
+export function cwdOf(agentId: string): string | undefined {
+  return cwds.get(agentId);
+}
+
 const now = () => Math.floor(Date.now() / 1000);
 
 /**
@@ -86,6 +97,7 @@ function upsert(h: HookBase, patch: Partial<AgentState>): AgentState {
   };
 
   agents.set(id, next);
+  if (h.cwd) cwds.set(id, h.cwd);
   publishAgentState(next);
 
   const t = reapers.get(id);
@@ -121,6 +133,7 @@ export function onSessionEnd(h: HookBase) {
   const timer = setTimeout(() => {
     clearAgentState(s.id);
     agents.delete(s.id);
+    cwds.delete(s.id);
     reapers.delete(s.id);
     console.log(`[state] ${s.id} purgado tras ${OFFLINE_TTL_MS / 60000} min offline`);
   }, OFFLINE_TTL_MS);
@@ -136,6 +149,15 @@ export function setWaitingPermission(agentId: string, tool: string, summary: str
   const next: AgentState = {
     ...prev, status: "waiting_permission", tool, detail: summary, since: now(),
   };
+  agents.set(agentId, next);
+  publishAgentState(next);
+}
+
+/** Saca al agente de waiting_permission cuando la peticion se resuelve. */
+export function clearWaitingPermission(agentId: string) {
+  const prev = agents.get(agentId);
+  if (!prev || prev.status !== "waiting_permission") return;
+  const next: AgentState = { ...prev, status: "working", since: now() };
   agents.set(agentId, next);
   publishAgentState(next);
 }

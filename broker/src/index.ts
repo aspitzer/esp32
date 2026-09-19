@@ -5,9 +5,10 @@
  * la LAN, pero eso lo sirve Mosquitto, no este proceso.
  */
 
-import { connect, disconnect, deviceList, purgeStaleAgents } from "./mqtt.ts";
+import { connect, disconnect, deviceList, purgeStaleAgents, onActionRequest, publishActionResult } from "./mqtt.ts";
 import * as state from "./state.ts";
-import { ask, pendingCount } from "./permissions.ts";
+import { ask, pendingCount, minRisk } from "./permissions.ts";
+import { actionCatalog, isActionId, runAction } from "./actions.ts";
 import { summarize } from "./state.ts";
 import type { HookBase, HookPreTool, HookStopFailure } from "./types.ts";
 
@@ -60,6 +61,8 @@ const server = Bun.serve({
         devices: deviceList(),
         pendingPermissions: pendingCount(),
         permissionsEnabled: PERMISSIONS_ENABLED,
+        permissionsMinRisk: minRisk(),
+        actions: actionCatalog(),
       });
     }
 
@@ -160,6 +163,19 @@ function log(s: ReturnType<typeof state.onStop>) {
     `[hook] ${s.id.padEnd(16)} ${s.status.padEnd(18)} ${(s.tool ?? "-").padEnd(10)} ${s.detail ?? ""}`,
   );
 }
+
+/**
+ * Fase 4. El catalogo es cerrado (actions.ts): un action desconocido se
+ * descarta aqui y nunca llega a tocar un shell.
+ */
+onActionRequest(async (req) => {
+  if (!isActionId(req.action)) {
+    console.warn(`[act ] accion desconocida descartada: ${JSON.stringify(req.action).slice(0, 40)}`);
+    return;
+  }
+  const r = await runAction(req.agentId, req.action);
+  publishActionResult({ agentId: req.agentId, action: req.action, ...r });
+});
 
 await connect();
 const purged = await purgeStaleAgents();

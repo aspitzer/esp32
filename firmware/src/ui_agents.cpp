@@ -158,6 +158,11 @@ static void backClicked(lv_event_t *) {
   lv_screen_load(scr);
 }
 
+void uiAgentsShowList() {
+  detailId[0] = '\0';
+  lv_screen_load(scr);
+}
+
 static void buildRows() {
   const lv_coord_t listW = SCREEN_W - AVATAR_W;
 

@@ -13,6 +13,7 @@
 #include "display.h"
 #include "net.h"
 #include "ui_agents.h"
+#include "ui_permission.h"
 
 static bool     uiDirty   = true;
 static uint32_t lastSlow  = 0;
@@ -40,6 +41,12 @@ static void logBoard() {
 }
 
 static void onNetChange() { uiDirty = true; }
+
+/** Una peticion de permiso se come la pantalla: es lo unico que te reclama. */
+static void onPermission() {
+  uiPermissionShow();
+  uiDirty = true;
+}
 
 /** El LED RGB repite el estado agregado: se ve desde lejos, sin leer nada. */
 static void updateLed() {
@@ -91,9 +98,11 @@ void setup() {
   logMem("tras LVGL");
 
   uiAgentsCreate();
+  uiPermissionCreate();
   logMem("tras crear UI");
 
   netOnChange(onNetChange);
+  netOnPermission(onPermission);
   netInit();
 
   randomSeed(esp_random());
@@ -107,20 +116,27 @@ void loop() {
 
   if (uiDirty) {
     uiDirty = false;
-    uiAgentsRefresh();
+    if (!uiPermissionActive()) uiAgentsRefresh();
   }
 
   if (now - lastSlow >= 250) {      // cronometros, parpadeo, reloj
     lastSlow = now;
-    uiAgentsTickSlow();
+    if (uiPermissionActive()) uiPermissionTick();
+    else                      uiAgentsTickSlow();
     updateLed();
   }
 
-  // BOOT largo -> recalibrar el tactil
+  // BOOT corto -> confirma la decision del permiso (restriccion 4: el tactil
+  // nunca aprueba solo). BOOT largo -> recalibrar el tactil.
   const bool boot = digitalRead(PIN_BOOT);
   if (boot != lastBoot) {
     lastBoot = boot;
-    if (boot == LOW) bootDown = now;
+    if (boot == LOW) {
+      bootDown = now;
+    } else if (bootDown && now - bootDown < 2000) {
+      if (uiPermissionConfirm()) uiDirty = true;
+      bootDown = 0;
+    }
   }
   if (boot == LOW && bootDown && now - bootDown > 2000) {
     Serial.println("[cal] BOOT largo -> recalibrar");
