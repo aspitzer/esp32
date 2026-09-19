@@ -19,6 +19,16 @@ const TOKEN = process.env.AGENT_BUS_TOKEN;
 // y el flujo normal de permisos de Claude Code sigue su curso.
 const PERMISSIONS_ENABLED = process.env.ENABLE_PERMISSIONS === "1";
 
+/** Rutas validas. Una ruta desconocida da 404, no 405: el metodo no es el problema. */
+const HOOK_PATHS = [
+  "/hook/session-start",
+  "/hook/pre-tool",
+  "/hook/stop",
+  "/hook/stop-failure",
+  "/hook/session-end",
+  "/hook/permission",
+] as const;
+
 /** 200 con cuerpo vacio: recibido, sin decision. Lo que debe devolver la telemetria. */
 const ok = () => new Response(null, { status: 200 });
 
@@ -39,7 +49,11 @@ const server = Bun.serve({
   async fetch(req) {
     const url = new URL(req.url);
 
-    if (url.pathname === "/health") {
+    // Normalizada: sin barra final y en minusculas. "/health/" y "/Health"
+    // tienen que llevar al mismo sitio que "/health".
+    const path = (url.pathname.replace(/\/+$/, "") || "/").toLowerCase();
+
+    if (path === "/health") {
       return Response.json({
         ok: true,
         agents: state.snapshot(),
@@ -49,10 +63,31 @@ const server = Bun.serve({
       });
     }
 
-    if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
-    if (!authorized(req))      return new Response("forbidden", { status: 403 });
+    if (path === "/") {
+      return Response.json({
+        service: "agent-bus",
+        endpoints: [
+          "GET  /health",
+          ...HOOK_PATHS.map((p) => `POST ${p}`),
+        ],
+      });
+    }
 
-    switch (url.pathname) {
+    if (!(HOOK_PATHS as readonly string[]).includes(path)) {
+      return new Response(`no such endpoint: ${url.pathname}\n`, { status: 404 });
+    }
+
+    // A partir de aqui la ruta existe, asi que un 405 significa de verdad
+    // que el metodo esta mal y no que la ruta no exista.
+    if (req.method !== "POST") {
+      return new Response(`${path} solo acepta POST\n`, {
+        status: 405,
+        headers: { Allow: "POST" },
+      });
+    }
+    if (!authorized(req)) return new Response("forbidden\n", { status: 403 });
+
+    switch (path) {
       case "/hook/session-start": {
         const h = await body<HookBase>(req);
         if (h) log(state.onSessionStart(h));
@@ -103,7 +138,7 @@ const server = Bun.serve({
       }
     }
 
-    return new Response("not found", { status: 404 });
+    return new Response(`no such endpoint: ${url.pathname}\n`, { status: 404 });
   },
 });
 
