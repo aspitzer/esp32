@@ -6,7 +6,10 @@ muestra el estado de N agentes de Claude Code y permite aprobar/denegar sus perm
 ## Restricciones no negociables (salen del hardware)
 
 1. **Sin PSRAM.** Prohibido el framebuffer completo (320x480x2 = 307 KB). LVGL con
-   buffer parcial: dos buffers de 320x40 px (~51 KB) y DMA.
+   buffer parcial. Implementado: **un** buffer de 480x40 px (37,5 KB) reservado
+   con `heap_caps_malloc(MALLOC_CAP_DMA)` una vez en el arranque. El segundo
+   buffer solo sirve con flush asincrono; con `pushPixels` bloqueante LVGL
+   esperaria igual. Anadirlo cuando se pase a `pushPixelsDMA`.
 2. **Sin TLS en la placa.** MQTT plano en la LAN. Todo el cifrado lo hace el broker.
 3. **Táctil resistivo de un punto.** Sin gestos ni swipes. Calibración persistida en
    NVS. Áreas táctiles mínimo 100x80 px.
@@ -35,6 +38,17 @@ en regiones no contiguas y una asignación única no puede cruzarlas.
 Medido en placa (fase 0), con WiFi asociado: `free 253 KB`, **`largest 107 KB`**.
 WiFi cuesta ~50 KB de `free` y **cero** de `largest`. Ese 107 KB es el techo real
 para los buffers de LVGL (que necesitan 2 x 25,6 KB).
+
+Medido en placa con la UI de fase 1 corriendo y MQTT conectado:
+`free 180 KB`, **`largest 107 KB`**. Muy por encima del suelo.
+
+Reparto: buffer de dibujo 37,5 KB en heap DMA, pool propio de LVGL 24 KB en
+DRAM estatica (`LV_MEM_SIZE`). 40 KB de pool **no caben**: desbordan
+`dram0_0_seg` junto al resto de estaticos.
+
+**Trampa de LVGL 9**: `lv_color_t` ocupa **3 bytes** (RGB888) aunque
+`LV_COLOR_DEPTH` sea 16 y el buffer de render sea RGB565. `sizeof(lv_color_t)`
+no sirve para dimensionar buffers; hay que contar bytes a mano.
 
 Reglas derivadas:
 - Nada de `String` concatenado en bucles.
@@ -101,9 +115,12 @@ El puerto MQTT sí escucha en la LAN.
 funcionando, calibración persistida en NVS, presupuesto de memoria medido con WiFi
 levantado. Detalle en `PINOUT.md`.
 
-**Fase 1 en curso.** Broker funcionando: recibe los cinco hooks, mantiene estado por
-sesion (y por subagente, via `agent_id`) y publica retained por MQTT. Mock de 4
-agentes probado de punta a punta. Falta la UI del firmware.
+**Fase 1 casi cerrada.** Broker y firmware hablando: la placa se conecta a MQTT,
+publica su LWT y recibe los estados retained. Prototipo de las pantallas en
+https://claude.ai/artifact/P6bkHKWNkznEBRaPDUdYBh
+
+Particionado cambiado a `huge_app.csv`: con LVGL el binario son 1,16 MB y no
+cabia en la ranura de 1,25 MB del esquema con OTA. Se pierde OTA, que no se usa.
 
 Decisiones tomadas en fase 1, no obvias:
 - **MQTT con usuario y contrasena.** Quien pueda publicar en `claude/perm/res`

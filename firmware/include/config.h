@@ -25,6 +25,24 @@
 // --- Bateria ---
 #define PIN_BAT_ADC 34   // input-only; divisor 1:2
 
+// --- Pantalla, en apaisado (restriccion 8) ---
+#define SCREEN_ROTATION 1
+#define SCREEN_W        480
+#define SCREEN_H        320
+
+// Reparto de la pantalla
+#define TOPBAR_H        26
+#define AVATAR_W        180
+#define ROWS_VISIBLE     4
+
+// --- Red ---
+#define WIFI_RETRY_MIN_MS   1000
+#define WIFI_RETRY_MAX_MS  30000
+#define MQTT_RETRY_MIN_MS   1000
+#define MQTT_RETRY_MAX_MS  30000
+#define NTP_SERVER        "pool.ntp.org"
+#define TZ_SPAIN          "CET-1CEST,M3.5.0,M10.5.0/3"
+
 // --- Presupuesto de memoria (CLAUDE.md) ---
 #define HEAP_FLOOR_BYTES   (80 * 1024)
 #define HEAP_LOG_PERIOD_MS 30000
