@@ -1,0 +1,40 @@
+{
+  "_comment": "Fase 1 (telemetria). Pegar en ~/.claude/settings.json. El broker escucha solo en 127.0.0.1. Todos estos endpoints devuelven 200 con cuerpo vacio: no deciden nada.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook/session-start",
+            "timeout": 5,
+            "headers": { "X-Bus-Token": "$AGENT_BUS_TOKEN" },
+            "allowedEnvVars": ["AGENT_BUS_TOKEN"]
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "http", "url": "http://127.0.0.1:8787/hook/pre-tool", "timeout": 5 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "http", "url": "http://127.0.0.1:8787/hook/stop", "timeout": 5 }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          { "type": "http", "url": "http://127.0.0.1:8787/hook/session-end", "timeout": 5 }
+        ]
+      }
+    ]
+  }
+}

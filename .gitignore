@@ -1,0 +1,18 @@
+# PlatformIO
+firmware/.pio/
+firmware/.vscode/
+firmware/.pioenvs/
+firmware/.piolibdeps/
+firmware/CMakeListsPrivate.txt
+
+# Bun / node
+broker/node_modules/
+broker/bun.lockb
+broker/.env
+broker/*.log
+
+# credenciales locales
+firmware/include/secrets.h
+
+# macOS
+.DS_Store
