@@ -64,6 +64,19 @@ Cada pin ahí está marcado como `DOCS` (verificado en fuente oficial de Freenov
 `PLACA` (pendiente de comprobar en hardware). Si una fuente contradice a otra, gana
 lo que compile y funcione en la placa; y se anota.
 
+## Reglas que salieron de fallos reales
+
+- **`lv_label_set_text` invalida el área aunque el texto sea idéntico.** Refrescar
+  etiquetas sin comparar antes costaba 8 fps. Usar `setTextIfChanged`.
+- **En LVGL 9 `lv_color_t` ocupa 3 bytes** aunque `LV_COLOR_DEPTH` sea 16. No
+  dimensionar buffers con `sizeof(lv_color_t)`.
+- **En macOS `/tmp` es symlink a `/private/tmp`.** Comparar rutas de procesos
+  (tmux, cwd de hooks) exige `realpath` antes.
+- **Reordenar la lista en cada mensaje la hace ilegible.** Histéresis de 6 s,
+  salvo `waiting_permission`, que sube al instante.
+- **Un proceso que muere sin `SessionEnd` deja un fantasma retained.** El mock
+  tiene que simular también el cierre limpio, porque es el caso que reproduce.
+
 ## Contrato MQTT (resumen)
 
 Detalle en [`docs/mqtt-contract.md`](docs/mqtt-contract.md). **Es una interfaz
@@ -75,15 +88,22 @@ estable: si cambia, cambian broker y firmware a la vez, en el mismo commit.**
 | `claude/perm/req` | broker → placa | no | `{requestId,agentId,tool,summary,risk,expiresAt}` |
 | `claude/perm/res` | placa → broker | no | `{requestId,decision,source}` |
 | `claude/device/display-01/online` | placa → broker (LWT) | sí | `"1"` / `"0"` |
+| `claude/action/req` | placa → broker | no | `{agentId,action,source}` |
+| `claude/action/res` | broker → placa | no | `{agentId,action,ok,via,detail}` |
 
 `status` ∈ `idle | thinking | working | waiting_permission | error | offline`
-`decision` ∈ `allow | deny`
+`decision` ∈ `allow | deny` · `action` ∈ `continue | tests | status | interrupt`
+
+El broker solo enruta a la placa los permisos de riesgo ≥ `PERM_MIN_RISK`
+(`high` por defecto). El catálogo de acciones es cerrado y su texto nunca viaja
+por MQTT.
 
 ## Comandos
 
 ```bash
-# mosquitto (usuario/contrasena en broker/.env, sin TLS)
-cd broker && mosquitto -c mosquitto/mosquitto.conf -v
+# todo de golpe (mosquitto + broker, idempotente)
+./scripts/start.sh
+./scripts/stop.sh
 
 # firmware
 cd firmware
@@ -100,6 +120,9 @@ bun run src/index.ts               # hooks en 127.0.0.1:8787 + publicacion MQTT
 bun run tools/mock-agent.ts        # 3 agentes falsos
 bun run tools/mock-agent.ts --agents 4 --speed 5
 curl -s localhost:8787/health | jq # estado del bus
+
+# probar las acciones de fase 4 SIN lanzar sesiones de verdad
+ACTIONS_DRY_RUN=1 bun run src/index.ts
 ```
 
 `broker/.env` no se commitea. Se genera con `.env.example` de plantilla; la
@@ -115,12 +138,16 @@ El puerto MQTT sí escucha en la LAN.
 funcionando, calibración persistida en NVS, presupuesto de memoria medido con WiFi
 levantado. Detalle en `PINOUT.md`.
 
-**Fase 1 casi cerrada.** Broker y firmware hablando: la placa se conecta a MQTT,
-publica su LWT y recibe los estados retained. Prototipo de las pantallas en
-https://claude.ai/artifact/P6bkHKWNkznEBRaPDUdYBh
+**Fases 1, 2, 3 y 4 implementadas y probadas** (2026-09-19). Prototipo de las
+pantallas en https://claude.ai/artifact/P6bkHKWNkznEBRaPDUdYBh
 
-Particionado cambiado a `huge_app.csv`: con LVGL el binario son 1,16 MB y no
-cabia en la ranura de 1,25 MB del esquema con OTA. Se pierde OTA, que no se usa.
+Particionado en `huge_app.csv`: con LVGL el binario son 1,20 MB y no cabía en la
+ranura de 1,25 MB del esquema con OTA. Se pierde OTA, que no se usa.
+
+Pendiente de comprobar con el dedo (no se puede automatizar):
+- La pulsación física de BOOT confirmando un permiso.
+- El modal disparado por un agente real, no por un `curl`.
+- Que el texto de 12 px de la segunda línea se lea bien en el panel TN.
 
 Decisiones tomadas en fase 1, no obvias:
 - **MQTT con usuario y contrasena.** Quien pueda publicar en `claude/perm/res`
