@@ -59,6 +59,13 @@ cd broker && bun run tools/mock-agent.ts --agents 4 --speed 2
 el dedo plano. Una aprobación accidental aquí ejecuta un `rm -rf`. Tocar
 selecciona; confirmar es siempre el botón físico BOOT.
 
+**En modo `auto` la placa se enciende poco, y es lo correcto.** Con
+`permissions.defaultMode: "auto"` el clasificador de Claude Code aprueba solo
+lo inocuo y solo pregunta por lo destructivo o irreversible. El hook
+`PermissionRequest` únicamente se dispara cuando iba a preguntar, así que el
+conjunto que llega a la placa es casi el mismo que marca esta heurística. En
+modo `default` se dispara mucho más.
+
 **El broker solo molesta con lo de riesgo alto** (`PERM_MIN_RISK`, por defecto
 `high`). Todo lo demás se resuelve al instante y sigue el flujo normal en el
 portátil. Una placa que interrumpe por cada `Edit` es una placa que dejas de

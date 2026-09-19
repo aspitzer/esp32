@@ -144,6 +144,11 @@ pantallas en https://claude.ai/artifact/P6bkHKWNkznEBRaPDUdYBh
 Particionado en `huge_app.csv`: con LVGL el binario son 1,20 MB y no cabía en la
 ranura de 1,25 MB del esquema con OTA. Se pierde OTA, que no se usa.
 
+El hook `PermissionRequest` solo se dispara cuando Claude Code iba a preguntar.
+En `permissions.defaultMode: "auto"` eso es justo el conjunto destructivo, que
+es el que esta heurística marca como alto: encajan. En modo `default` la placa
+se encenderá mucho más a menudo.
+
 Pendiente de comprobar con el dedo (no se puede automatizar):
 - La pulsación física de BOOT confirmando un permiso.
 - El modal disparado por un agente real, no por un `curl`.
