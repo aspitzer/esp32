@@ -21,13 +21,31 @@ static uint32_t lastHeap  = 0;
 static uint32_t bootDown  = 0;
 static bool     lastBoot  = HIGH;
 
+static uint32_t lastFpsAt = 0;
+
 static void logMem(const char *tag) {
   const uint32_t freeHeap = ESP.getFreeHeap();
   const uint32_t largest  = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
-  Serial.printf("[mem] %-16s free=%7u B (%3u KB)  largest=%7u B (%3u KB)  minEver=%7u B%s\n",
+
+  // fps medido, no estimado: solo cuentan los refrescos completos.
+  const uint32_t now     = millis();
+  const uint32_t frames  = displayFramesAndReset();
+  const uint32_t elapsed = lastFpsAt ? now - lastFpsAt : 0;
+  lastFpsAt = now;
+  const uint32_t fps10 = elapsed ? (frames * 10000UL) / elapsed : 0;
+
+  uint32_t chunks, pixels, spiMs;
+  displayRenderStats(&chunks, &pixels, &spiMs);
+
+  Serial.printf("[mem] %-16s free=%7u B (%3u KB)  largest=%7u B (%3u KB)  minEver=%7u B  fps=%u.%u%s\n",
                 tag, freeHeap, freeHeap / 1024, largest, largest / 1024,
-                ESP.getMinFreeHeap(),
+                ESP.getMinFreeHeap(), fps10 / 10, fps10 % 10,
                 largest < HEAP_FLOOR_BYTES ? "  <-- largest POR DEBAJO DEL SUELO" : "");
+  if (elapsed) {
+    Serial.printf("[gfx] frames=%u trozos=%u (%u/frame)  pixeles=%u  SPI=%u ms de %u ms (%u%%)\n",
+                  frames, chunks, frames ? chunks / frames : 0, pixels, spiMs, elapsed,
+                  elapsed ? (spiMs * 100) / elapsed : 0);
+  }
 }
 
 static void logBoard() {

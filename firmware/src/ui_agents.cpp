@@ -5,6 +5,7 @@
 #include <time.h>
 
 #include "agents.h"
+#include "avatar.h"
 #include "config.h"
 #include "net.h"
 #include <string.h>
@@ -30,11 +31,9 @@ struct RowUi {
 
 static lv_obj_t *scr;
 static lv_obj_t *lblMqtt, *lblRssi, *lblClock;
-static lv_obj_t *eyeL, *eyeR, *lblMood, *lblCount;
+static lv_obj_t *lblMood, *lblCount;
 static RowUi     rows[ROWS_VISIBLE];
 
-static bool     eyesClosed   = false;
-static uint32_t nextBlinkAt  = 0;
 
 // --- pantalla de detalle -----------------------------------------------------
 // Se entra tocando una fila. El id se guarda, no el indice: el agente puede
@@ -59,6 +58,25 @@ static void noPad(lv_obj_t *o) {
   lv_obj_set_style_radius(o, 0, 0);
   lv_obj_set_style_bg_opa(o, LV_OPA_TRANSP, 0);
   lv_obj_clear_flag(o, LV_OBJ_FLAG_SCROLLABLE);
+}
+
+/**
+ * lv_label_set_text invalida el area SIEMPRE, aunque el texto sea identico.
+ * Con 15 etiquetas refrescadas 4 veces por segundo eso son 60 invalidaciones
+ * por segundo de texto que no ha cambiado, y rasterizar texto es lo caro:
+ * medido, se comia el framerate mientras el SPI estaba al 9%.
+ */
+static void setTextIfChanged(lv_obj_t *label, const char *text) {
+  const char *cur = lv_label_get_text(label);
+  if (cur && strcmp(cur, text) == 0) return;
+  lv_label_set_text(label, text);
+}
+
+/** Igual para el color: cambiarlo invalida aunque sea el mismo. */
+static void setColorIfChanged(lv_obj_t *o, lv_color_t c) {
+  const lv_color_t cur = lv_obj_get_style_text_color(o, LV_PART_MAIN);
+  if (cur.red == c.red && cur.green == c.green && cur.blue == c.blue) return;
+  lv_obj_set_style_text_color(o, c, 0);
 }
 
 static lv_obj_t *mkLabel(lv_obj_t *parent, const lv_font_t *font, lv_color_t color) {
@@ -117,19 +135,7 @@ static void buildAvatar() {
   lv_obj_set_style_border_color(panel, C_EDGE, 0);
   lv_obj_set_style_border_width(panel, 1, 0);
 
-  eyeL = lv_obj_create(panel);
-  noPad(eyeL);
-  lv_obj_set_size(eyeL, 46, 58);
-  lv_obj_set_style_radius(eyeL, 23, 0);
-  lv_obj_set_style_bg_opa(eyeL, LV_OPA_COVER, 0);
-  lv_obj_align(eyeL, LV_ALIGN_CENTER, -36, -34);
-
-  eyeR = lv_obj_create(panel);
-  noPad(eyeR);
-  lv_obj_set_size(eyeR, 46, 58);
-  lv_obj_set_style_radius(eyeR, 23, 0);
-  lv_obj_set_style_bg_opa(eyeR, LV_OPA_COVER, 0);
-  lv_obj_align(eyeR, LV_ALIGN_CENTER, 36, -34);
+  avatarCreate(panel);
 
   lblMood = mkLabel(panel, &lv_font_montserrat_16, C_TXT);
   lv_obj_align(lblMood, LV_ALIGN_CENTER, 0, 34);
@@ -261,39 +267,39 @@ static void refreshDetail() {
   const Agent *a = agentById(detailId);
 
   if (!a) {                       // la sesion termino mientras mirabas
-    lv_label_set_text(dLabel, "agente desaparecido");
-    lv_obj_set_style_text_color(dLabel, C_DIM, 0);
-    lv_label_set_text(dStatus, "");
-    lv_label_set_text(dTool, "");
-    lv_label_set_text(dDetail, "La sesion ha terminado y el broker ya la ha purgado.");
-    lv_label_set_text(dError, "");
-    lv_label_set_text(dMeta, "");
+    setTextIfChanged(dLabel, "agente desaparecido");
+    setColorIfChanged(dLabel, C_DIM);
+    setTextIfChanged(dStatus, "");
+    setTextIfChanged(dTool, "");
+    setTextIfChanged(dDetail, "La sesion ha terminado y el broker ya la ha purgado.");
+    setTextIfChanged(dError, "");
+    setTextIfChanged(dMeta, "");
     return;
   }
 
   const lv_color_t col = lv_color_hex(agentColor(a->status));
 
-  lv_label_set_text(dLabel, a->label);
-  lv_obj_set_style_text_color(dLabel, C_TXT, 0);
+  setTextIfChanged(dLabel, a->label);
+  setColorIfChanged(dLabel, C_TXT);
 
-  lv_label_set_text(dStatus, agentStatusName(a->status));
-  lv_obj_set_style_text_color(dStatus, col, 0);
+  setTextIfChanged(dStatus, agentStatusName(a->status));
+  setColorIfChanged(dStatus, col);
 
-  lv_label_set_text(dTool, a->tool[0] ? a->tool : "-");
-  lv_label_set_text(dDetail, a->detail[0] ? a->detail : "(sin detalle)");
+  setTextIfChanged(dTool, a->tool[0] ? a->tool : "-");
+  setTextIfChanged(dDetail, a->detail[0] ? a->detail : "(sin detalle)");
 
   if (a->lastError[0]) {
     static char e[AG_ERROR_LEN + 16];
     snprintf(e, sizeof(e), "ultimo error: %s", a->lastError);
-    lv_label_set_text(dError, e);
+    setTextIfChanged(dError, e);
   } else {
-    lv_label_set_text(dError, "");
+    setTextIfChanged(dError, "");
   }
 
   static char meta[64], el[10];
   fmtElapsed(el, sizeof(el), a->since);
   snprintf(meta, sizeof(meta), "id %s   en este estado %s", a->id, el);
-  lv_label_set_text(dMeta, meta);
+  setTextIfChanged(dMeta, meta);
 }
 
 void uiAgentsCreate() {
@@ -318,25 +324,25 @@ static void refreshTopbar() {
 
   switch (netState()) {
     case NET_MQTT_UP:
-      lv_label_set_text(lblMqtt, "MQTT");
-      lv_obj_set_style_text_color(lblMqtt, lv_color_hex(0x24D65F), 0);
+      setTextIfChanged(lblMqtt, "MQTT");
+      setColorIfChanged(lblMqtt, lv_color_hex(0x24D65F));
       break;
     case NET_WIFI_UP:
       snprintf(buf, sizeof(buf), "SIN MQTT");
-      lv_label_set_text(lblMqtt, buf);
-      lv_obj_set_style_text_color(lblMqtt, lv_color_hex(0xFF4B4B), 0);
+      setTextIfChanged(lblMqtt, buf);
+      setColorIfChanged(lblMqtt, lv_color_hex(0xFF4B4B));
       break;
     default:
-      lv_label_set_text(lblMqtt, "SIN WIFI");
-      lv_obj_set_style_text_color(lblMqtt, lv_color_hex(0xFF4B4B), 0);
+      setTextIfChanged(lblMqtt, "SIN WIFI");
+      setColorIfChanged(lblMqtt, lv_color_hex(0xFF4B4B));
       break;
   }
 
   if (netState() == NET_WIFI_DOWN) {
-    lv_label_set_text(lblRssi, "");
+    setTextIfChanged(lblRssi, "");
   } else {
     snprintf(buf, sizeof(buf), "%d dBm", netRssi());
-    lv_label_set_text(lblRssi, buf);
+    setTextIfChanged(lblRssi, buf);
   }
 
   const time_t t = time(nullptr);
@@ -344,9 +350,9 @@ static void refreshTopbar() {
     struct tm tm;
     localtime_r(&t, &tm);
     snprintf(buf, sizeof(buf), "%02d:%02d", tm.tm_hour, tm.tm_min);
-    lv_label_set_text(lblClock, buf);
+    setTextIfChanged(lblClock, buf);
   } else {
-    lv_label_set_text(lblClock, "--:--");
+    setTextIfChanged(lblClock, "--:--");
   }
 }
 
@@ -358,18 +364,10 @@ static void refreshAvatar() {
   const AgentStatus agg = agentsAggregate();
   const lv_color_t  col = lv_color_hex(agentColor(agg));
 
-  lv_obj_set_style_bg_color(eyeL, col, 0);
-  lv_obj_set_style_bg_color(eyeR, col, 0);
+  avatarSetState(agg);
 
-  // Ojos cerrados = dos lineas planas. Tambien es el estado offline.
-  const bool flat = eyesClosed || agg == ST_OFFLINE;
-  lv_obj_set_height(eyeL, flat ? 7 : 58);
-  lv_obj_set_height(eyeR, flat ? 7 : 58);
-  lv_obj_set_style_radius(eyeL, flat ? 4 : 23, 0);
-  lv_obj_set_style_radius(eyeR, flat ? 4 : 23, 0);
-
-  lv_label_set_text(lblMood, MOOD[agg]);
-  lv_obj_set_style_text_color(lblMood, col, 0);
+  setTextIfChanged(lblMood, MOOD[agg]);
+  setColorIfChanged(lblMood, col);
 
   uint8_t total = 0, busy = 0;
   for (const auto &a : agents) {
@@ -381,7 +379,7 @@ static void refreshAvatar() {
   static char buf[28];
   if (total == 0) snprintf(buf, sizeof(buf), "esperando eventos");
   else            snprintf(buf, sizeof(buf), "%u activos \xC2\xB7 %u en total", busy, total);
-  lv_label_set_text(lblCount, buf);
+  setTextIfChanged(lblCount, buf);
 }
 
 static void refreshRows() {
@@ -401,7 +399,7 @@ static void refreshRows() {
     const lv_color_t col = lv_color_hex(agentColor(a.status));
 
     lv_obj_set_style_bg_color(r.bar, col, 0);
-    lv_label_set_text(r.label, a.label);
+    setTextIfChanged(r.label, a.label);
 
     static char line[AG_TOOL_LEN + AG_DETAIL_LEN + 8];
     switch (a.status) {
@@ -422,14 +420,14 @@ static void refreshRows() {
         else             snprintf(line, sizeof(line), "%s", a.tool);
         break;
     }
-    lv_label_set_text(r.detail, line);
-    lv_obj_set_style_text_color(r.detail, a.status == ST_WORKING ? C_SOFT : col, 0);
+    setTextIfChanged(r.detail, line);
+    setColorIfChanged(r.detail, a.status == ST_WORKING ? C_SOFT : col);
 
     static char t[10];
     fmtElapsed(t, sizeof(t), a.since);
-    lv_label_set_text(r.timer, t);
-    lv_obj_set_style_text_color(
-        r.timer, (a.status == ST_ERROR || a.status == ST_WAITING_PERMISSION) ? col : C_TXT, 0);
+    setTextIfChanged(r.timer, t);
+    setColorIfChanged(
+        r.timer, (a.status == ST_ERROR || a.status == ST_WAITING_PERMISSION) ? col : C_TXT);
   }
 }
 
@@ -445,18 +443,6 @@ void uiAgentsRefresh() {
 }
 
 void uiAgentsTickSlow() {
-  const uint32_t now = millis();
-  const AgentStatus agg = agentsAggregate();
-
-  // Parpadeo con intervalo aleatorio. Esperando permiso no parpadea: mira fijo.
-  if (agg != ST_WAITING_PERMISSION && agg != ST_OFFLINE) {
-    if (now >= nextBlinkAt) {
-      eyesClosed  = !eyesClosed;
-      nextBlinkAt = now + (eyesClosed ? 120 : random(1800, 5200));
-    }
-  } else if (eyesClosed) {
-    eyesClosed = false;
-  }
-
+  avatarTick();
   uiAgentsRefresh();
 }

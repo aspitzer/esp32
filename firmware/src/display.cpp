@@ -78,16 +78,36 @@ static void calRun() {
 
 // --- enganche de LVGL --------------------------------------------------------
 
+// Un refresco se parte en varios flushes (el buffer son 40 lineas de 320).
+// Solo el ultimo cierra un frame: contar flushes daria un fps inflado.
+static uint32_t frames = 0, chunks = 0, pixels = 0, spiUs = 0;
+
 static void flushCb(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map) {
   const uint32_t w = area->x2 - area->x1 + 1;
   const uint32_t h = area->y2 - area->y1 + 1;
+  const uint32_t t0 = micros();
 
   tft.startWrite();
   tft.setAddrWindow(area->x1, area->y1, w, h);
   tft.pushPixels(reinterpret_cast<uint16_t *>(px_map), w * h);
   tft.endWrite();
 
+  spiUs  += micros() - t0;
+  pixels += w * h;
+  chunks++;
+  if (lv_display_flush_is_last(disp)) frames++;
   lv_display_flush_ready(disp);
+}
+
+uint32_t displayFramesAndReset() {
+  const uint32_t f = frames;
+  frames = 0;
+  return f;
+}
+
+void displayRenderStats(uint32_t *outChunks, uint32_t *outPixels, uint32_t *outSpiMs) {
+  *outChunks = chunks;  *outPixels = pixels;  *outSpiMs = spiUs / 1000;
+  chunks = 0; pixels = 0; spiUs = 0;
 }
 
 static void touchCb(lv_indev_t *, lv_indev_data_t *data) {
