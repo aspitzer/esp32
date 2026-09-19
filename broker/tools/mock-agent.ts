@@ -50,10 +50,15 @@ async function post(path: string, payload: Record<string, unknown>) {
   }
 }
 
+/** Sesiones vivas, para poder cerrarlas al salir. */
+const live: Array<Record<string, unknown>> = [];
+
 async function runAgent(i: number) {
   const session_id = crypto.randomUUID();
   const cwd = `/Users/andres/Projects/${REPOS[i % REPOS.length]}`;
   const base = { session_id, cwd, transcript_path: `/tmp/${session_id}.json`, permission_mode: "default" };
+
+  live.push(base);
 
   await sleep(rnd(0, 2000));
   await post("/hook/session-start", { ...base, hook_event_name: "SessionStart", source: "startup" });
@@ -89,4 +94,19 @@ async function runAgent(i: number) {
 console.log(`[mock] ${N} agentes contra ${BASE} (velocidad x${SPEED}). Ctrl+C para parar.`);
 for (let i = 0; i < N; i++) void runAgent(i);
 
-process.on("SIGINT", () => { console.log("\n[mock] fin"); process.exit(0); });
+/**
+ * Sin esto, matar el mock deja sus agentes retained como "trabajando" para
+ * siempre y la placa los pinta como fantasmas. Un agente real que muere sin
+ * SessionEnd hace exactamente lo mismo, asi que el mock tiene que simular
+ * tambien el cierre limpio.
+ */
+async function shutdown() {
+  console.log(`\n[mock] cerrando ${live.length} sesiones`);
+  await Promise.all(
+    live.map((base) => post("/hook/session-end", { ...base, hook_event_name: "SessionEnd", reason: "other" })),
+  );
+  process.exit(0);
+}
+
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);
