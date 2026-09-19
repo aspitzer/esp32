@@ -138,7 +138,10 @@ El puerto MQTT sí escucha en la LAN.
 funcionando, calibración persistida en NVS, presupuesto de memoria medido con WiFi
 levantado. Detalle en `PINOUT.md`.
 
-**Fases 1, 2, 3 y 4 implementadas y probadas** (2026-09-19). Prototipo de las
+**Las cuatro fases cerradas** (2026-09-19). Registro completo de pruebas en
+`docs/verificacion.md`: soak de 34,8 min con **deriva de heap de 0 bytes**,
+reconexión de MQTT con backoff exponencial sin reiniciar, y las cuatro rutas
+de permisos verificadas. Prototipo de las
 pantallas en https://claude.ai/artifact/P6bkHKWNkznEBRaPDUdYBh
 
 Particionado en `huge_app.csv`: con LVGL el binario son 1,20 MB y no cabía en la
