@@ -48,14 +48,34 @@ onPermResponse((res: PermResponse) => {
   p.resolve({ verdict: res.decision, source: res.source });
 });
 
-/** Heuristica de riesgo. Conservadora: ante la duda, sube el nivel. */
+/**
+ * Heuristica de riesgo. Conservadora, pero calibrada: si marca alto lo que no
+ * lo es, la placa interrumpe por todo y dejas de mirarla. "git push" a secas
+ * no destruye nada; "git push --force" reescribe historia publica. Un `-f`
+ * suelto tampoco vale como senal: `grep -f patrones.txt` es inofensivo.
+ */
+const HIGH = [
+  /\brm\s+-[a-z]*[rf]/,                  // rm -rf, rm -fr, rm -Rf
+  /\bgit\s+push\b[^|;]*\s(--force\b|-f\b)/, // push forzado, no un push normal
+  /\bgit\s+push\b[^|;]*--force-with-lease/,
+  /\bgit\s+reset\s+--hard\b/,
+  /\bgit\s+clean\s+-[a-z]*[fd]/,
+  /\bdrop\s+(table|database|schema)\b/,
+  /\btruncate\s+table\b/,
+  /\bdelete\s+from\b(?![^;]*\bwhere\b)/,  // DELETE sin WHERE
+  /\bmkfs\b|\bdd\s+if=/,
+  /\bchmod\s+(-[a-z]+\s+)?777\b/,
+  /\b(curl|wget)\b[^|]*\|\s*(sudo\s+)?(ba|z|d)?sh\b/,  // descargar y ejecutar
+  /\bsudo\b/,
+  /\bkubectl\s+delete\b|\bterraform\s+(destroy|apply)\b/,
+  /\bdocker\s+(system\s+prune|rm\s+-f)\b/,
+  /\bnpm\s+publish\b|\bbun\s+publish\b/,
+];
+
 export function riskOf(tool: string, summary: string): PermRequest["risk"] {
   const s = summary.toLowerCase();
-  const destructive =
-    /\brm\s+-[rf]|--force|-f\b|\bdrop\s+(table|database)\b|\btruncate\b|\bgit\s+push\b|\bgit\s+reset\s+--hard\b|\bchmod\s+777\b|\bcurl\b.*\|\s*(ba)?sh|\bmkfs\b|\bdd\s+if=/.test(s);
-  if (destructive) return "high";
-  if (tool === "Bash") return "medium";
-  if (tool === "Write" || tool === "Edit") return "medium";
+  if (HIGH.some((re) => re.test(s))) return "high";
+  if (tool === "Bash" || tool === "Write" || tool === "Edit") return "medium";
   return "low";
 }
 
