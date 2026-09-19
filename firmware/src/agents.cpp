@@ -1,4 +1,5 @@
 #include "agents.h"
+#include <Arduino.h>
 #include <string.h>
 
 Agent agents[AGENTS_MAX] = {};
@@ -97,22 +98,68 @@ static uint8_t rank(AgentStatus s) {
   }
 }
 
-uint8_t agentsVisible(uint8_t *out, uint8_t max) {
-  uint8_t n = 0;
-  for (uint8_t i = 0; i < AGENTS_MAX && n < AGENTS_MAX; i++) {
-    if (agents[i].used) out[n++] = i;
-  }
+/**
+ * Un agente pasa de working a idle y vuelve varias veces por minuto. Reordenar
+ * en cada cambio hace que las filas salten sin parar y la pantalla no se puede
+ * leer. Solucion: el orden solo se recalcula cuando cambia QUIEN esta, o cuando
+ * han pasado REORDER_QUIET_MS desde la ultima reordenacion.
+ *
+ * Excepcion: waiting_permission entra de inmediato. Es lo unico que te reclama
+ * y no puede esperar a que se calme la pantalla.
+ */
+#define REORDER_QUIET_MS 6000
 
-  // Insercion: n <= 6, no merece nada mas sofisticado.
+static uint8_t  orderCache[AGENTS_MAX];
+static uint8_t  orderLen      = 0;
+static uint32_t orderAt       = 0;
+static uint8_t  orderTopRank  = 0xFF;
+
+static void sortByRank(uint8_t *arr, uint8_t n) {
   for (uint8_t i = 1; i < n; i++) {
-    const uint8_t v = out[i];
+    const uint8_t v = arr[i];
     int8_t j = i - 1;
-    while (j >= 0 && rank(agents[out[j]].status) > rank(agents[v].status)) {
-      out[j + 1] = out[j];
+    while (j >= 0 && rank(agents[arr[j]].status) > rank(agents[v].status)) {
+      arr[j + 1] = arr[j];
       j--;
     }
-    out[j + 1] = v;
+    arr[j + 1] = v;
+  }
+}
+
+uint8_t agentsVisible(uint8_t *out, uint8_t max) {
+  uint8_t live[AGENTS_MAX], n = 0;
+  for (uint8_t i = 0; i < AGENTS_MAX; i++) {
+    if (agents[i].used) live[n++] = i;
   }
 
-  return n > max ? max : n;
+  // ¿Sigue valiendo el orden anterior? Vale si estan los mismos agentes.
+  bool sameSet = (n == orderLen);
+  if (sameSet) {
+    for (uint8_t i = 0; i < n && sameSet; i++) {
+      bool found = false;
+      for (uint8_t j = 0; j < orderLen; j++) {
+        if (orderCache[j] == live[i]) { found = true; break; }
+      }
+      sameSet = found;
+    }
+  }
+
+  uint8_t topRank = 0xFF;
+  for (uint8_t i = 0; i < n; i++) {
+    const uint8_t r = rank(agents[live[i]].status);
+    if (r < topRank) topRank = r;
+  }
+  const bool permissionAppeared = (topRank == 0 && orderTopRank != 0);
+
+  const uint32_t now = millis();
+  if (!sameSet || permissionAppeared || now - orderAt >= REORDER_QUIET_MS) {
+    sortByRank(live, n);
+    memcpy(orderCache, live, n);
+    orderLen     = n;
+    orderAt      = now;
+    orderTopRank = topRank;
+  }
+
+  memcpy(out, orderCache, orderLen);
+  return orderLen > max ? max : orderLen;
 }
