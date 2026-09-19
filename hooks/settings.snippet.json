@@ -1,5 +1,5 @@
 {
-  "_comment": "Fase 1 (telemetria). Pegar en ~/.claude/settings.json. El broker escucha solo en 127.0.0.1. Todos estos endpoints devuelven 200 con cuerpo vacio: no deciden nada.",
+  "_comment": "Fase 1 (telemetria). Pegar en ~/.claude/settings.json. El broker escucha solo en 127.0.0.1. Todos estos endpoints devuelven 200 con cuerpo vacio: no deciden nada. Exporta AGENT_BUS_TOKEN con el valor de broker/.env antes de arrancar Claude Code.",
   "hooks": {
     "SessionStart": [
       {
@@ -18,21 +18,53 @@
       {
         "matcher": "*",
         "hooks": [
-          { "type": "http", "url": "http://127.0.0.1:8787/hook/pre-tool", "timeout": 5 }
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook/pre-tool",
+            "timeout": 5,
+            "headers": { "X-Bus-Token": "$AGENT_BUS_TOKEN" },
+            "allowedEnvVars": ["AGENT_BUS_TOKEN"]
+          }
         ]
       }
     ],
     "Stop": [
       {
         "hooks": [
-          { "type": "http", "url": "http://127.0.0.1:8787/hook/stop", "timeout": 5 }
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook/stop",
+            "timeout": 5,
+            "headers": { "X-Bus-Token": "$AGENT_BUS_TOKEN" },
+            "allowedEnvVars": ["AGENT_BUS_TOKEN"]
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "matcher": "rate_limit|overloaded|server_error|billing_error|account_on_hold|authentication_failed|max_output_tokens",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook/stop-failure",
+            "timeout": 5,
+            "headers": { "X-Bus-Token": "$AGENT_BUS_TOKEN" },
+            "allowedEnvVars": ["AGENT_BUS_TOKEN"]
+          }
         ]
       }
     ],
     "SessionEnd": [
       {
         "hooks": [
-          { "type": "http", "url": "http://127.0.0.1:8787/hook/session-end", "timeout": 5 }
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook/session-end",
+            "timeout": 5,
+            "headers": { "X-Bus-Token": "$AGENT_BUS_TOKEN" },
+            "allowedEnvVars": ["AGENT_BUS_TOKEN"]
+          }
         ]
       }
     ]

@@ -68,6 +68,9 @@ estable: si cambia, cambian broker y firmware a la vez, en el mismo commit.**
 ## Comandos
 
 ```bash
+# mosquitto (usuario/contrasena en broker/.env, sin TLS)
+cd broker && mosquitto -c mosquitto/mosquitto.conf -v
+
 # firmware
 cd firmware
 pio run                      # compilar
@@ -78,9 +81,16 @@ pio run -t upload -t monitor # las dos cosas
 # broker
 cd broker
 bun install
-bun run src/index.ts         # servidor de hooks en 127.0.0.1:8787 + MQTT
-bun run tools/mock-agent.ts  # 3 agentes falsos publicando eventos
+set -a && . ./.env && set +a       # credenciales MQTT + token de hooks
+bun run src/index.ts               # hooks en 127.0.0.1:8787 + publicacion MQTT
+bun run tools/mock-agent.ts        # 3 agentes falsos
+bun run tools/mock-agent.ts --agents 4 --speed 5
+curl -s localhost:8787/health | jq # estado del bus
 ```
+
+`broker/.env` no se commitea. Se genera con `.env.example` de plantilla; la
+contrasena de MQTT tiene que coincidir con `broker/mosquitto/passwd`
+(`mosquitto_passwd -c mosquitto/passwd agentbus`).
 
 El broker escucha los hooks **solo en 127.0.0.1**, con cabecera `X-Bus-Token`.
 El puerto MQTT sí escucha en la LAN.
@@ -91,8 +101,22 @@ El puerto MQTT sí escucha en la LAN.
 funcionando, calibración persistida en NVS, presupuesto de memoria medido con WiFi
 levantado. Detalle en `PINOUT.md`.
 
-Siguiente: fase 1, dashboard de solo lectura. Empezar por `broker/tools/mock-agent.ts`,
-no por el firmware.
+**Fase 1 en curso.** Broker funcionando: recibe los cinco hooks, mantiene estado por
+sesion (y por subagente, via `agent_id`) y publica retained por MQTT. Mock de 4
+agentes probado de punta a punta. Falta la UI del firmware.
+
+Decisiones tomadas en fase 1, no obvias:
+- **MQTT con usuario y contrasena.** Quien pueda publicar en `claude/perm/res`
+  aprueba permisos arbitrarios. La restriccion 2 prohibe TLS en la placa, no
+  autenticacion.
+- **Al arrancar, el broker borra los retained de agentes que no conoce.** Un
+  reinicio implica que esas sesiones ya no existen; si no, la placa pinta
+  fantasmas trabajando para siempre.
+- **La salida de `PermissionRequest` va anidada en `hookSpecificOutput`** y usa
+  `verdict: "unspecified"` para "sin decision". Verificado en la documentacion,
+  no deducido.
+- Payload de estado medido: **157 bytes maximo**. El firmware puede usar un
+  `StaticJsonDocument<256>`.
 
 Ver el briefing para los criterios de aceptación de cada fase. No se pasa de fase
 hasta cerrar la anterior.

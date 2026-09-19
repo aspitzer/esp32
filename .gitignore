@@ -16,3 +16,8 @@ firmware/include/secrets.h
 
 # macOS
 .DS_Store
+
+# mosquitto: credenciales y datos persistidos
+broker/mosquitto/passwd
+broker/mosquitto/data/
+broker/.env

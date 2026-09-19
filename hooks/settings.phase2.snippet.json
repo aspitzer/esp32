@@ -1,0 +1,19 @@
+{
+  "_comment": "Fase 2 (permisos). NO pegar hasta que la placa apruebe de verdad y el fallback este probado. Requiere ENABLE_PERMISSIONS=1 en el entorno del broker. Timeout 120 s > PERM_TIMEOUT_MS del broker (90 s): el broker SIEMPRE responde antes de que el hook expire.",
+  "hooks": {
+    "PermissionRequest": [
+      {
+        "matcher": "Bash|Write|Edit",
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook/permission",
+            "timeout": 120,
+            "headers": { "X-Bus-Token": "$AGENT_BUS_TOKEN" },
+            "allowedEnvVars": ["AGENT_BUS_TOKEN"]
+          }
+        ]
+      }
+    ]
+  }
+}
