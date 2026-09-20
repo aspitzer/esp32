@@ -72,6 +72,15 @@ modo `default` se dispara mucho más.
 portátil. Una placa que interrumpe por cada `Edit` es una placa que dejas de
 mirar.
 
+**La pantalla se apaga sola, pero no cuando importa.** PWM en el backlight:
+a tope, atenuada al 14% tras 2 min y apagada tras 12. Lo que cuenta como
+actividad es el tacto, BOOT, y que un agente entre en error o pida permiso —
+**no** que un agente trabaje: si no, con una sesión activa no se atenuaría
+nunca, que es el caso normal. Con un permiso esperando no se apaga jamás.
+
+**El toque que despierta la pantalla no pulsa nada.** A oscuras no sabes dónde
+estás tocando, y ahí abajo hay un botón que aprueba comandos.
+
 **El broker tiene que estar siempre vivo.** Con el hook de permisos puesto, si
 el broker no responde cada evento intenta un POST que falla. Por eso Mosquitto
 y el broker van como LaunchAgents con `KeepAlive`: arrancan al iniciar sesión y
@@ -101,6 +110,7 @@ pinta para siempre agentes de sesiones que ya murieron.
 | Payload de estado | 157 B máx → `StaticJsonDocument<256>` sobra |
 | Flash | 1,20 MB de 3 MB (`huge_app.csv`, sin OTA) |
 | Error del táctil en las esquinas | hasta 12 px → nada a menos de 14 px del borde |
+| Atenuado / apagado de pantalla | 2 min / 12 min de inactividad |
 | Fallback de permisos con la placa apagada | 0,04 s |
 
 `largest_free_block` es la métrica que manda, no `free`: el heap del ESP32 está

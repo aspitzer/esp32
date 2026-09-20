@@ -60,6 +60,9 @@ static void logMem(const char *tag) {
                   lv.used_pct > 80 ? "  <-- SUBIR LV_MEM_SIZE" : "");
   }
 
+  static const char *BL[] = {"apagada", "atenuada", "a tope"};
+  Serial.printf("[bl  ] pantalla %s\n", BL[displayBacklightState()]);
+
   if (elapsed) {
     Serial.printf("[gfx] frames=%u trozos=%u (%u/frame)  pixeles=%u  SPI=%u ms de %u ms (%u%%)\n",
                   frames, chunks, frames ? chunks / frames : 0, pixels, spiMs, elapsed,
@@ -77,12 +80,27 @@ static void logBoard() {
   Serial.printf("[hw ] sketch=%u B  libre=%u B\n", ESP.getSketchSize(), ESP.getFreeSketchSpace());
 }
 
-static void onNetChange() { uiDirty = true; }
+/**
+ * Un agente trabajando genera un evento por herramienta. Si eso despertara la
+ * pantalla, con una sesion activa no se atenuaria nunca, que es justo el caso
+ * normal. Solo despierta lo que te reclama a TI: un permiso o un error.
+ */
+static void onNetChange() {
+  uiDirty = true;
+
+  static AgentStatus prev = ST_COUNT;
+  const AgentStatus agg = agentsAggregate();
+  if (agg != prev) {
+    prev = agg;
+    if (agg == ST_WAITING_PERMISSION || agg == ST_ERROR) displayNoteActivity();
+  }
+}
 
 /** Una peticion de permiso se come la pantalla: es lo unico que te reclama. */
 static void onPermission() {
   uiPermissionShow();
   uiDirty = true;
+  displayNoteActivity();
 }
 
 /** El LED RGB repite el estado agregado: se ve desde lejos, sin leer nada. */
@@ -161,6 +179,8 @@ void loop() {
     if (uiPermissionActive()) uiPermissionTick();
     else                      uiAgentsTickSlow();
     updateLed();
+    // Con un permiso esperando la pantalla no se apaga jamas.
+    displayIdleTick(uiPermissionActive());
   }
 
   // BOOT corto -> confirma la decision del permiso (restriccion 4: el tactil
@@ -170,6 +190,7 @@ void loop() {
     lastBoot = boot;
     if (boot == LOW) {
       bootDown = now;
+      displayNoteActivity();
     } else if (bootDown && now - bootDown < 2000) {
       if (uiPermissionConfirm()) uiDirty = true;
       bootDown = 0;

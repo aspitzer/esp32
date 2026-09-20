@@ -27,6 +27,11 @@ static Preferences prefs;
 #define BUF_BYTES (SCREEN_W * BUF_LINES * (LV_COLOR_DEPTH / 8))
 static uint8_t *drawBuf = nullptr;
 
+// Declarados aqui arriba porque touchCb los necesita antes de que aparezca el
+// bloque del backlight.
+static uint8_t  blLevel    = BL_FULL;
+static uint32_t lastActive = 0;
+
 // --- calibracion del tactil, persistida en NVS -------------------------------
 #define NVS_NAMESPACE "cad"
 #define NVS_KEY_CAL   "touchcal"
@@ -114,7 +119,18 @@ static void touchCb(lv_indev_t *, lv_indev_data_t *data) {
   uint16_t x, y;
   // getTouch hace una transaccion SPI en el mismo bus que el panel. LVGL solo
   // llama aqui entre flushes, nunca durante uno, asi que no hay colision.
-  if (tft.getTouch(&x, &y)) {
+  const bool pressed = tft.getTouch(&x, &y);
+
+  if (pressed && blLevel < BL_FULL) {
+    // El toque que despierta la pantalla NO debe pulsar nada: a oscuras no
+    // sabes donde estas tocando, y ahi abajo hay botones que aprueban cosas.
+    displayNoteActivity();
+    data->state = LV_INDEV_STATE_RELEASED;
+    return;
+  }
+
+  if (pressed) {
+    displayNoteActivity();
     data->point.x = x;
     data->point.y = y;
     data->state   = LV_INDEV_STATE_PRESSED;
@@ -125,13 +141,39 @@ static void touchCb(lv_indev_t *, lv_indev_data_t *data) {
 
 static uint32_t tickCb() { return millis(); }
 
-void displayBacklight(bool on) {
-  digitalWrite(TFT_BL, on ? TFT_BACKLIGHT_ON : !TFT_BACKLIGHT_ON);
+// --- backlight con PWM ------------------------------------------------------
+
+static void blWrite(uint8_t duty) {
+  if (duty == blLevel) return;
+  blLevel = duty;
+  // TFT_BACKLIGHT_ON dice que polaridad enciende; con LOW habria que invertir.
+  ledcWrite(BL_CHANNEL, TFT_BACKLIGHT_ON == HIGH ? duty : 255 - duty);
+}
+
+void displayBacklight(bool on) { blWrite(on ? BL_FULL : 0); }
+
+uint8_t displayBacklightState() {
+  return blLevel == 0 ? 0 : (blLevel < BL_FULL ? 1 : 2);
+}
+
+void displayNoteActivity() {
+  lastActive = millis();
+  blWrite(BL_FULL);
+}
+
+void displayIdleTick(bool forceAwake) {
+  if (forceAwake) { displayNoteActivity(); return; }
+
+  const uint32_t idle = millis() - lastActive;
+  if      (idle >= BL_OFF_AFTER_MS) blWrite(0);
+  else if (idle >= BL_DIM_AFTER_MS) blWrite(BL_DIM);
 }
 
 void displayInit(bool forceCalibration) {
-  pinMode(TFT_BL, OUTPUT);
-  displayBacklight(true);
+  ledcSetup(BL_CHANNEL, BL_FREQ_HZ, BL_RES_BITS);
+  ledcAttachPin(TFT_BL, BL_CHANNEL);
+  blLevel = 0;                    // fuerza la primera escritura
+  displayNoteActivity();
 
   tft.init();
   tft.setRotation(SCREEN_ROTATION);

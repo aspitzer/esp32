@@ -35,6 +35,19 @@
 #define AVATAR_W        180
 #define ROWS_VISIBLE     4
 
+// --- Backlight ---
+// El panel TN a tope 24/7 no tiene sentido y deslumbra de noche.
+#define BL_CHANNEL        0
+#define BL_FREQ_HZ     5000
+#define BL_RES_BITS       8
+#define BL_FULL         255
+#define BL_DIM           36          // ~14%: se ve, no molesta
+// Solo cuentan como actividad el tacto, BOOT, y que algun agente pase a
+// error o a esperar permiso. Que un agente trabaje NO despierta la pantalla:
+// si no, con una sesion activa no se atenuaria nunca.
+#define BL_DIM_AFTER_MS  (2  * 60 * 1000UL)
+#define BL_OFF_AFTER_MS  (12 * 60 * 1000UL)
+
 // --- Red ---
 #define WIFI_RETRY_MIN_MS   1000
 #define WIFI_RETRY_MAX_MS  30000

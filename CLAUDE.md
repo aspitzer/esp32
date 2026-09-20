@@ -64,6 +64,18 @@ Cada pin ahí está marcado como `DOCS` (verificado en fuente oficial de Freenov
 `PLACA` (pendiente de comprobar en hardware). Si una fuente contradice a otra, gana
 lo que compile y funcione en la placa; y se anota.
 
+## Backlight
+
+PWM en `TFT_BL` (canal LEDC 0, 5 kHz, 8 bits). A tope, atenuada al 14% tras
+`BL_DIM_AFTER_MS`, apagada tras `BL_OFF_AFTER_MS`.
+
+Cuenta como actividad: tacto, BOOT, y que el estado agregado pase a `error` o
+`waiting_permission`. **No** cuenta que un agente trabaje. Con un permiso en
+pantalla, `displayIdleTick(true)` la mantiene encendida pase lo que pase.
+
+El toque que despierta se traga en `touchCb` y se reporta como RELEASED: a
+oscuras no sabes dónde tocas y abajo hay botones que aprueban comandos.
+
 ## Reglas que salieron de fallos reales
 
 - **`lv_label_set_text` invalida el área aunque el texto sea idéntico.** Refrescar
