@@ -101,7 +101,13 @@ por MQTT.
 ## Comandos
 
 ```bash
-# todo de golpe (mosquitto + broker, idempotente)
+# arranque automatico (LaunchAgents con KeepAlive) — recomendado
+./scripts/install-autostart.sh
+./scripts/uninstall-autostart.sh
+launchctl list | grep cad-          # ver si corren
+tail -f ~/Library/Logs/cad-broker.log
+
+# o solo para esta vez
 ./scripts/start.sh
 ./scripts/stop.sh
 

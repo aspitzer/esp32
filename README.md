@@ -27,7 +27,8 @@ cd broker && bun install
 cp .env.example .env                              # y rellena MQTT_PASS / AGENT_BUS_TOKEN
 mosquitto_passwd -c mosquitto/passwd agentbus     # la misma contraseña que en .env
 
-./scripts/start.sh                                # mosquitto + broker
+./scripts/install-autostart.sh                    # mosquitto + broker al iniciar sesion
+#   (o ./scripts/start.sh para arrancarlos solo esta vez)
 cd firmware && pio run -t upload -t monitor       # placa
 ```
 
@@ -70,6 +71,11 @@ modo `default` se dispara mucho más.
 `high`). Todo lo demás se resuelve al instante y sigue el flujo normal en el
 portátil. Una placa que interrumpe por cada `Edit` es una placa que dejas de
 mirar.
+
+**El broker tiene que estar siempre vivo.** Con el hook de permisos puesto, si
+el broker no responde cada evento intenta un POST que falla. Por eso Mosquitto
+y el broker van como LaunchAgents con `KeepAlive`: arrancan al iniciar sesión y
+launchd los resucita si mueren. Probado matándolos con `kill -9`.
 
 **El hook de permisos nunca agota su timeout.** Si la placa está apagada
 responde en 0,04 s; si nadie contesta, a los 90 s. Un hook colgado congela la
