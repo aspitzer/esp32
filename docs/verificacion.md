@@ -105,6 +105,16 @@ No hay fuga: los valores no se mueven ni un byte en media hora.
 Exponencial con tope de 30 s, y **sin reiniciar la placa**. Al reconectar
 recibe los retained y repinta.
 
+## Operación (2026-09-20)
+
+| Qué | Cómo | Resultado |
+|---|---|---|
+| Supervivencia sin tocar nada | 20 h con Mosquitto y broker corriendo | Placa online, 0 incidencias |
+| `KeepAlive` de launchd | `kill -9` al broker y a Mosquitto | Ambos resucitan en <15 s |
+| Disparador de permiso | `bun run tools/test-permission.ts` | Modal en pantalla 90 s, timeout limpio |
+| Atenuado del panel | 2 min sin actividad | `[bl ] pantalla atenuada` |
+| Apagado del panel | 12 min sin actividad | `[bl ] pantalla apagada` |
+
 ## Memoria
 
 | Momento | `free` | `largest_free_block` |
