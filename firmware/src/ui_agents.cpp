@@ -18,6 +18,9 @@
 #define C_TXT    lv_color_hex(0xFFFFFF)
 #define C_DIM    lv_color_hex(0x9A9A9A)
 #define C_SOFT   lv_color_hex(0xC8C8C8)
+// Borde de los botones neutros. C_EDGE (#2E2E2E) vale para separar paneles,
+// pero en el TN un boton con ese borde no se distingue del fondo.
+#define C_BTN    lv_color_hex(0x7A7A7A)
 
 #define ROW_H ((SCREEN_H - TOPBAR_H) / ROWS_VISIBLE)
 
@@ -231,22 +234,28 @@ static void buildRows() {
   }
 }
 
-/** Boton grande con borde de color. Todos los targets tactiles pasan por aqui. */
+/**
+ * Boton grande. El color del BORDE y el del TEXTO son parametros distintos a
+ * proposito: VOLVER lleva borde gris oscuro, pero su texto tiene que ser
+ * blanco. Cuando eran el mismo, el texto quedaba gris #2E2E2E sobre panel
+ * #101010 y en el panel TN no se leia nada.
+ */
 static lv_obj_t *mkBigButton(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
                              lv_coord_t w, lv_coord_t h, const char *text,
-                             lv_color_t color, lv_event_cb_t cb, void *user) {
+                             lv_color_t border, lv_color_t textColor,
+                             lv_event_cb_t cb, void *user) {
   lv_obj_t *b = lv_obj_create(parent);
   noPad(b);
   lv_obj_set_size(b, w, h);
   lv_obj_set_pos(b, x, y);
   lv_obj_set_style_bg_color(b, C_PANEL, 0);
   lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
-  lv_obj_set_style_border_color(b, color, 0);
+  lv_obj_set_style_border_color(b, border, 0);
   lv_obj_set_style_border_width(b, 3, 0);
   lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, user);
 
-  lv_obj_t *l = mkLabel(b, &lv_font_montserrat_20, color);
+  lv_obj_t *l = mkLabel(b, &lv_font_montserrat_20, textColor);
   lv_label_set_text(l, text);
   lv_obj_center(l);
   return b;
@@ -336,9 +345,9 @@ static void buildDetail() {
   // Dos botones de 222x76 a 14 px de los bordes. La calibracion medida da
   // hasta 12 px de error en las esquinas, asi que nada pegado al borde.
   mkBigButton(detailScr, 14,  SCREEN_H - 76 - 14, 222, 76, "ACCIONES",
-              lv_color_hex(0x4DA6FF), actionsClicked, nullptr);
+              lv_color_hex(0x4DA6FF), lv_color_hex(0x4DA6FF), actionsClicked, nullptr);
   mkBigButton(detailScr, 244, SCREEN_H - 76 - 14, 222, 76, "VOLVER",
-              C_EDGE, backClicked, nullptr);
+              C_BTN, C_TXT, backClicked, nullptr);
 }
 
 static void refreshDetail() {
@@ -400,8 +409,8 @@ static void buildActions() {
   actId[3]    = "interrupt";actLabel[3] = "PARAR";    actColor[3] = lv_color_hex(0xFF4B4B);
 
   for (uint8_t i = 0; i < ACTION_COUNT; i++) {
-    actBtn[i] = mkBigButton(actionsScr, X[i], Y[i], 222, 88, actLabel[i], actColor[i],
-                            actionPicked, (void *)(intptr_t)i);
+    actBtn[i] = mkBigButton(actionsScr, X[i], Y[i], 222, 88, actLabel[i],
+                            actColor[i], actColor[i], actionPicked, (void *)(intptr_t)i);
   }
 
   lblActResult = mkLabel(actionsScr, &lv_font_montserrat_12, C_DIM);
@@ -409,7 +418,7 @@ static void buildActions() {
   lv_obj_set_width(lblActResult, SCREEN_W - 28);
   lv_label_set_long_mode(lblActResult, LV_LABEL_LONG_DOT);
 
-  mkBigButton(actionsScr, 14, 246, SCREEN_W - 28, 64, "VOLVER", C_EDGE,
+  mkBigButton(actionsScr, 14, 246, SCREEN_W - 28, 64, "VOLVER", C_BTN, C_TXT,
               actionsBack, nullptr);
 }
 

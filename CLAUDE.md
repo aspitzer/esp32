@@ -97,6 +97,10 @@ oscuras no sabes dónde tocas y abajo hay botones que aprueban comandos.
 - **No pases separadores escritos como escape (`\t`) a un subproceso.** Se
   perdió por el camino y los campos llegaron pegados, en silencio. Un campo
   por llamada, o un separador construido en tiempo de ejecución y validado.
+- **En un botón, color de borde y color de texto son cosas distintas.** Reusar
+  uno para ambos dejó `VOLVER` en gris #2E2E2E sobre panel #101010: ilegible.
+  Y en TN un borde a #2E2E2E tampoco se distingue del fondo; los botones
+  neutros usan #7A7A7A.
 - **Un proceso que muere sin `SessionEnd` deja un fantasma retained.** El mock
   tiene que simular también el cierre limpio, porque es el caso que reproduce.
 
