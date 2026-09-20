@@ -19,6 +19,10 @@ export function cwdOf(agentId: string): string | undefined {
   return cwds.get(agentId);
 }
 
+export function knownCwds(): Record<string, string> {
+  return Object.fromEntries(cwds);
+}
+
 const now = () => Math.floor(Date.now() / 1000);
 
 /**

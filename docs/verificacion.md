@@ -115,6 +115,25 @@ recibe los retained y repinta.
 | Atenuado del panel | 2 min sin actividad | `[bl ] pantalla atenuada` |
 | Apagado del panel | 12 min sin actividad | `[bl ] pantalla apagada` |
 
+## Fallos encontrados al usarlo de verdad (2026-09-20)
+
+Tres, encadenados, y ninguno visible en las pruebas de ayer porque el broker
+corría desde una terminal y no como servicio.
+
+1. **`Bun.spawn` lanza excepción si el binario no existe y no la capturaba.**
+   La excepción subía por el handler async, nadie la recogía y el proceso
+   moría. Cada pulsación de un botón tumbaba el broker; launchd lo resucitaba.
+   Once arranques en el log antes de verlo.
+2. **launchd arranca con `PATH` mínimo**, sin `/opt/homebrew/bin`. `tmux` y
+   `claude` no se encontraban — solo como servicio, que es como corre ahora.
+3. **El separador de campos se perdía entre el fuente y tmux.** Los tres
+   campos llegaban pegados, ningún panel casaba nunca y toda acción caía a
+   `claude -p` en silencio. Probado con tabulador y con `\x1f`, fallaba igual;
+   se resolvió pidiendo un campo por llamada, sin separador que perder.
+
+Ahora, verificado bajo launchd: `via: tmux`, `detail: cadt3:0.0`, la frase
+escrita en el panel y el broker sigue vivo.
+
 ## Memoria
 
 | Momento | `free` | `largest_free_block` |

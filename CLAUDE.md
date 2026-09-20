@@ -86,6 +86,15 @@ oscuras no sabes dónde tocas y abajo hay botones que aprueban comandos.
   (tmux, cwd de hooks) exige `realpath` antes.
 - **Reordenar la lista en cada mensaje la hace ilegible.** Histéresis de 6 s,
   salvo `waiting_permission`, que sube al instante.
+- **`Bun.spawn` LANZA si el ejecutable no existe.** Sin try/catch, la excepción
+  sube por el handler async y mata el proceso entero. En un daemon, morir es
+  siempre peor que fallar la operación.
+- **launchd da un `PATH` mínimo** sin `/opt/homebrew/bin`. Lo que funciona en
+  tu terminal falla como servicio. Binarios por ruta absoluta o `PATH`
+  explícito en el envoltorio.
+- **No pases separadores escritos como escape (`\t`) a un subproceso.** Se
+  perdió por el camino y los campos llegaron pegados, en silencio. Un campo
+  por llamada, o un separador construido en tiempo de ejecución y validado.
 - **Un proceso que muere sin `SessionEnd` deja un fantasma retained.** El mock
   tiene que simular también el cierre limpio, porque es el caso que reproduce.
 

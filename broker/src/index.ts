@@ -62,6 +62,7 @@ const server = Bun.serve({
         pendingPermissions: pendingCount(),
         permissionsEnabled: PERMISSIONS_ENABLED,
         permissionsMinRisk: minRisk(),
+        cwds: state.knownCwds(),
         actions: actionCatalog(),
       });
     }
@@ -173,9 +174,27 @@ onActionRequest(async (req) => {
     console.warn(`[act ] accion desconocida descartada: ${JSON.stringify(req.action).slice(0, 40)}`);
     return;
   }
-  const r = await runAction(req.agentId, req.action);
-  publishActionResult({ agentId: req.agentId, action: req.action, ...r });
+  try {
+    const r = await runAction(req.agentId, req.action);
+    publishActionResult({ agentId: req.agentId, action: req.action, ...r });
+  } catch (e) {
+    // Cinturon y tirantes: pase lo que pase aqui dentro, el bus no se cae.
+    const msg = (e as Error).message ?? String(e);
+    console.error(`[act ] ${req.agentId} ${req.action} reventó: ${msg}`);
+    publishActionResult({
+      agentId: req.agentId, action: req.action,
+      ok: false, via: "none", detail: msg.slice(0, 80),
+    });
+  }
 });
+
+/**
+ * Este proceso es el bus de todos los hooks: si muere, cada evento de Claude
+ * Code intenta un POST que falla. Un fallo suelto no puede tumbarlo. Se
+ * registra y se sigue sirviendo; morir es siempre peor.
+ */
+process.on("unhandledRejection", (r) => console.error("[bus ] promesa sin capturar:", r));
+process.on("uncaughtException",  (e) => console.error("[bus ] excepcion sin capturar:", e));
 
 await connect();
 const purged = await purgeStaleAgents();
