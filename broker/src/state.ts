@@ -34,6 +34,7 @@ function agentIdOf(h: HookBase): string {
 const NOISE = new Set([
   "projects", "repos", "repo", "src", "code", "dev", "work", "git",
   "documents", "desktop", "users", "home", "workspace", "sites",
+  "tmp", "private", "var", "opt",
 ]);
 
 /**
