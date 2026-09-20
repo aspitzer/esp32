@@ -51,14 +51,17 @@ cd broker && bun run tools/mock-agent.ts --agents 4 --speed 2
 |---|---|---|
 | Lista | inicio | Avatar + hasta 4 agentes con color de estado, herramienta y cronómetro |
 | Detalle | tocando una fila | Comando completo sin truncar, último error, id, tiempo en ese estado |
-| Acciones | botón en el detalle | CONTINUA · TESTS · ESTADO · PARAR |
+| Acciones | botón en el detalle | CONTINUA · TESTS · ESTADO · PARAR. Se elige tocando, **se lanza con BOOT** |
 | Permiso | automática | Comando, riesgo, cuenta atrás. Se elige tocando, **se confirma con BOOT** |
 
 ## Las decisiones que no son obvias
 
-**El toque nunca aprueba nada por sí solo.** El táctil resistivo se dispara con
-el dedo plano. Una aprobación accidental aquí ejecuta un `rm -rf`. Tocar
-selecciona; confirmar es siempre el botón físico BOOT.
+**El toque nunca ejecuta nada por sí solo**, ni en permisos ni en acciones. El
+táctil resistivo se dispara con el dedo plano. Una aprobación accidental
+ejecuta un `rm -rf`; una acción accidental sobre una sesión que no está en
+tmux lanza un `claude -p`, o sea **una sesión de Claude autónoma de verdad**
+en ese directorio, que gasta tokens y toca ficheros. Tocar selecciona;
+ejecutar es siempre el botón físico BOOT.
 
 **En modo `auto` la placa se enciende poco, y es lo correcto.** Con
 `permissions.defaultMode: "auto"` el clasificador de Claude Code aprueba solo

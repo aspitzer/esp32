@@ -11,3 +11,12 @@ void uiAgentsTickSlow();
 
 /** Vuelve a la lista desde cualquier otra pantalla. */
 void uiAgentsShowList();
+
+/** true mientras la pantalla de acciones esta visible. */
+bool uiActionsActive();
+
+/**
+ * Pulsacion corta de BOOT en la pantalla de acciones: lanza lo seleccionado.
+ * Devuelve true si habia algo seleccionado y se ha enviado.
+ */
+bool uiActionsConfirm();

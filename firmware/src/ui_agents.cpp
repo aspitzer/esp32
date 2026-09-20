@@ -43,7 +43,21 @@ static lv_obj_t *dLabel, *dStatus, *dTool, *dDetail, *dMeta, *dError;
 static char      detailId[AG_ID_LEN] = {0};
 
 // --- pantalla de acciones (fase 4) -------------------------------------------
-static lv_obj_t *actionsScr, *lblActAgent, *lblActResult;
+//
+// Mismo contrato que los permisos: el toque SOLO selecciona, BOOT ejecuta.
+// Sin esto, un roce en el tactil resistivo lanzaba una sesion de Claude
+// autonoma de verdad en ese directorio, que gasta tokens y toca ficheros.
+#define ACTION_COUNT 4
+
+static lv_obj_t   *actionsScr, *lblActAgent, *lblActResult;
+static lv_obj_t   *actBtn[ACTION_COUNT];
+static lv_color_t  actColor[ACTION_COUNT];
+static const char *actId[ACTION_COUNT];
+static const char *actLabel[ACTION_COUNT];
+static int8_t      actChosen  = -1;
+static bool        actVisible = false;
+
+bool uiActionsActive() { return actVisible; }
 
 static const Agent *agentById(const char *id) {
   if (!id || !*id) return nullptr;
@@ -164,11 +178,14 @@ static void rowClicked(lv_event_t *e) {
 
 static void backClicked(lv_event_t *) {
   detailId[0] = '\0';
+  actVisible  = false;
   lv_screen_load(scr);
 }
 
 void uiAgentsShowList() {
   detailId[0] = '\0';
+  actVisible  = false;
+  actChosen   = -1;
   lv_screen_load(scr);
 }
 
@@ -238,16 +255,49 @@ static lv_obj_t *mkBigButton(lv_obj_t *parent, lv_coord_t x, lv_coord_t y,
 static void showActions();
 static void actionsClicked(lv_event_t *) { showActions(); }
 
-/** El id de la accion viaja como user_data: es una constante de flash, no se copia. */
-static void actionFired(lv_event_t *e) {
-  const char *action = (const char *)lv_event_get_user_data(e);
-  if (!detailId[0]) return;
-  netSendAction(detailId, action);
-  setTextIfChanged(lblActResult, "enviado, esperando al broker...");
-  setColorIfChanged(lblActResult, C_DIM);
+/** Marca la seleccion. Sin esto no sabes que vas a lanzar al pulsar BOOT. */
+static void paintActionChoice() {
+  for (uint8_t i = 0; i < ACTION_COUNT; i++) {
+    const bool on = (actChosen == (int8_t)i);
+    lv_obj_set_style_bg_color(actBtn[i], on ? actColor[i] : C_PANEL, 0);
+    lv_obj_set_style_border_width(actBtn[i], on ? 5 : 3, 0);
+    lv_obj_t *l = lv_obj_get_child(actBtn[i], 0);
+    if (l) lv_obj_set_style_text_color(l, on ? C_BG : actColor[i], 0);
+  }
+
+  static char hint[64];
+  if (actChosen < 0) {
+    setTextIfChanged(lblActResult, "toca una accion; se lanza con BOOT");
+    setColorIfChanged(lblActResult, C_DIM);
+  } else {
+    snprintf(hint, sizeof(hint), "PULSA BOOT PARA %s", actLabel[actChosen]);
+    setTextIfChanged(lblActResult, hint);
+    setColorIfChanged(lblActResult, actColor[actChosen]);
+  }
 }
 
-static void actionsBack(lv_event_t *) { lv_screen_load(detailScr); }
+/** El indice viaja como user_data; el id es una constante de flash. */
+static void actionPicked(lv_event_t *e) {
+  actChosen = (int8_t)(intptr_t)lv_event_get_user_data(e);
+  paintActionChoice();
+}
+
+bool uiActionsConfirm() {
+  if (!actVisible || actChosen < 0 || !detailId[0]) return false;
+
+  netSendAction(detailId, actId[actChosen]);
+  setTextIfChanged(lblActResult, "enviado, esperando al broker...");
+  setColorIfChanged(lblActResult, C_DIM);
+  actChosen = -1;
+  paintActionChoice();
+  return true;
+}
+
+static void actionsBack(lv_event_t *) {
+  actVisible = false;
+  actChosen  = -1;
+  lv_screen_load(detailScr);
+}
 
 static void buildDetail() {
   detailScr = lv_obj_create(nullptr);
@@ -342,14 +392,17 @@ static void buildActions() {
   lv_obj_set_pos(lblActAgent, 14, 6);
 
   // 2x2 de 222x88: por encima del minimo de 100x80 del tactil resistivo.
-  mkBigButton(actionsScr, 14,  34,  222, 88, "CONTINUA", lv_color_hex(0x24D65F),
-              actionFired, (void *)"continue");
-  mkBigButton(actionsScr, 244, 34,  222, 88, "TESTS",    lv_color_hex(0x4DA6FF),
-              actionFired, (void *)"tests");
-  mkBigButton(actionsScr, 14,  130, 222, 88, "ESTADO",   lv_color_hex(0xB07CFF),
-              actionFired, (void *)"status");
-  mkBigButton(actionsScr, 244, 130, 222, 88, "PARAR",    lv_color_hex(0xFF4B4B),
-              actionFired, (void *)"interrupt");
+  static const lv_coord_t X[ACTION_COUNT] = { 14, 244, 14, 244 };
+  static const lv_coord_t Y[ACTION_COUNT] = { 34, 34, 130, 130 };
+  actId[0]    = "continue"; actLabel[0] = "CONTINUA"; actColor[0] = lv_color_hex(0x24D65F);
+  actId[1]    = "tests";    actLabel[1] = "TESTS";    actColor[1] = lv_color_hex(0x4DA6FF);
+  actId[2]    = "status";   actLabel[2] = "ESTADO";   actColor[2] = lv_color_hex(0xB07CFF);
+  actId[3]    = "interrupt";actLabel[3] = "PARAR";    actColor[3] = lv_color_hex(0xFF4B4B);
+
+  for (uint8_t i = 0; i < ACTION_COUNT; i++) {
+    actBtn[i] = mkBigButton(actionsScr, X[i], Y[i], 222, 88, actLabel[i], actColor[i],
+                            actionPicked, (void *)(intptr_t)i);
+  }
 
   lblActResult = mkLabel(actionsScr, &lv_font_montserrat_12, C_DIM);
   lv_obj_set_pos(lblActResult, 14, 224);
@@ -364,8 +417,9 @@ static void showActions() {
   const Agent *a = agentById(detailId);
   setTextIfChanged(lblActAgent, a ? a->label : detailId);
   netClearActionResult();
-  setTextIfChanged(lblActResult, "PARAR solo funciona si la sesion corre en tmux");
-  setColorIfChanged(lblActResult, C_DIM);
+  actChosen  = -1;
+  actVisible = true;
+  paintActionChoice();
   lv_screen_load(actionsScr);
 }
 
@@ -515,7 +569,7 @@ void uiAgentsTickSlow() {
 
   // Resultado de la ultima accion, en cuanto lo publica el broker.
   const char *r = netLastActionResult();
-  if (r && *r) {
+  if (r && *r && actChosen < 0) {
     setTextIfChanged(lblActResult, r);
     setColorIfChanged(lblActResult, strncmp(r, "OK", 2) == 0 ? lv_color_hex(0x24D65F)
                                                              : lv_color_hex(0xFFB020));

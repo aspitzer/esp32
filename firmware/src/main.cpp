@@ -183,8 +183,10 @@ void loop() {
     displayIdleTick(uiPermissionActive());
   }
 
-  // BOOT corto -> confirma la decision del permiso (restriccion 4: el tactil
-  // nunca aprueba solo). BOOT largo -> recalibrar el tactil.
+  // BOOT corto -> confirma el permiso o lanza la accion seleccionada. El
+  // tactil nunca ejecuta nada por si solo (restriccion 4): un roce con el
+  // dedo plano no puede aprobar un rm -rf ni lanzar una sesion autonoma.
+  // BOOT largo -> recalibrar el tactil.
   const bool boot = digitalRead(PIN_BOOT);
   if (boot != lastBoot) {
     lastBoot = boot;
@@ -192,7 +194,8 @@ void loop() {
       bootDown = now;
       displayNoteActivity();
     } else if (bootDown && now - bootDown < 2000) {
-      if (uiPermissionConfirm()) uiDirty = true;
+      // Un permiso manda sobre todo lo demas; si no, confirma una accion.
+      if (uiPermissionConfirm() || uiActionsConfirm()) uiDirty = true;
       bootDown = 0;
     }
   }

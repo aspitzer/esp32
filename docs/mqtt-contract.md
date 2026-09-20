@@ -84,6 +84,10 @@ placa interrumpe por cada `Edit`, dejas de mirarla, y el proyecto ha fracasado.
 
 `action` ∈ `continue | tests | status | interrupt`
 
+La placa **solo publica aquí tras confirmar con BOOT**. Tocar un botón en la
+pantalla de acciones únicamente selecciona: sin pulsación física no sale nada
+al bus.
+
 **El catálogo es cerrado.** El texto que se escribe en la sesión está en
 `broker/src/actions.ts`, nunca viaja por MQTT, y todo se ejecuta con argv sin
 shell. Un `action` desconocido se descarta en el broker. Un dispositivo
