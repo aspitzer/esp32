@@ -107,6 +107,12 @@ oscuras no sabes dónde tocas y abajo hay botones que aprueban comandos.
 - **El nombre de una sesión es el que le puso el humano**, en
   `custom-title.json`, no el `aiTitle` automático ni la carpeta. Si alguien se
   molesta en llamar a una sesión "brain", eso es lo que quiere leer.
+- **Una sesión con subagentes arrancados NO está en reposo.** De un subagente
+  solo llegan eventos cuando usa una herramienta; mientras piensa, no manda
+  nada. Hay que contar `SubagentStart`/`SubagentStop`, o el padre aparece
+  parado mientras el terminal dice "waiting for 2 background agents".
+- **La fila se lee de reojo: texto explicativo, no el comando.** El literal se
+  guarda en `raw` y se ve al tocar la fila.
 - **Un subagente no es una fila.** Se agrupa bajo su sesión, o ves el mismo
   nombre dos veces (padre en reposo, hijo trabajando) sin forma de relacionarlos.
 - **En un botón, color de borde y color de texto son cosas distintas.** Reusar

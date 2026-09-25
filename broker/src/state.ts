@@ -45,11 +45,31 @@ interface Sub {
   status: AgentStatus;
   tool: string | null;
   detail: string | null;
+  raw: string | null;
   rx: number;              // ms, para caducar subagentes que mueren sin avisar
 }
 
-/** sessionId -> subagentes vivos */
+/** sessionId -> subagentes vivos (los que han usado alguna herramienta) */
 const subs = new Map<string, Map<string, Sub>>();
+
+/**
+ * sessionId -> subagentes arrancados y aun no terminados.
+ *
+ * Hace falta aparte de `subs` porque de un subagente solo nos enteramos
+ * cuando usa una herramienta: mientras piensa no manda nada, y la sesion
+ * padre, que ya cerro su turno, aparecia "en reposo" mintiendo. Esto es lo
+ * mismo que Claude Code enseña en el terminal como "waiting for N background
+ * agents to finish".
+ */
+const pending = new Map<string, Set<string>>();
+
+export function onSubagentStart(h: HookBase): AgentState | null {
+  const id = agentIdOf(h), sub = subIdOf(h);
+  if (!sub) return null;
+  if (!pending.has(id)) pending.set(id, new Set());
+  pending.get(id)!.add(sub);
+  return own.has(id) ? republish(id) : null;
+}
 
 /** Un subagente sin noticias tanto rato se da por muerto. */
 const SUB_TTL_MS = 3 * 60 * 1000;
@@ -208,6 +228,84 @@ function truncate(s: string, n = 64): string {
   return flat.length > n ? flat.slice(0, n - 1) + "..." : flat;
 }
 
+/**
+ * Que esta haciendo, en cristiano.
+ *
+ * La fila se lee de reojo desde el otro lado de la mesa. Un
+ * "sed -n '30,70p' lib/delivery/types.ts" no dice nada en esa situacion;
+ * "Leyendo types.ts" si. El comando literal no se pierde: viaja aparte en
+ * `raw` y se ve entero al tocar la fila.
+ */
+const BASH: Array<[RegExp, string]> = [
+  [/\bgit\s+commit/,                          "Haciendo commit"],
+  [/\bgit\s+push/,                            "Subiendo cambios a git"],
+  [/\bgit\s+(diff|status|log|show)/,          "Revisando cambios en git"],
+  [/\bgit\s+(checkout|switch|branch|merge|rebase)/, "Moviendose de rama"],
+  [/\bgit\s+(add|restore|stash)/,             "Preparando cambios"],
+  [/\bgit\b/,                                 "Trasteando con git"],
+  [/\b(pytest|jest|vitest|go\s+test|cargo\s+test)\b|\b(npm|bun|yarn|pnpm)\s+(run\s+)?test/, "Lanzando los tests"],
+  [/\b(npm|bun|yarn|pnpm)\s+(run\s+)?(build|compile)\b|\bmake\b|\bcargo\s+build\b|\bgradle\b/, "Compilando"],
+  [/\bpio\s+run[^|]*-t\s+upload/,            "Flasheando la placa"],
+  [/\bpio\s+run/,                             "Compilando el firmware"],
+  [/\b(npm|bun|yarn|pnpm|pip3?|brew|cargo)\s+(install|add|i)\b/, "Instalando dependencias"],
+  [/\b(rg|grep|ag|ack)\b/,                    "Buscando en el codigo"],
+  [/\bfind\b|\bls\b/,                       "Mirando que hay"],
+  [/\b(cat|head|tail|less|sed\s+-n|bat)\b/,   "Leyendo un fichero"],
+  [/\b(curl|wget|http)\b/,                    "Llamando a una API"],
+  [/\bdocker\b|\bkubectl\b|\bterraform\b/, "Tocando infraestructura"],
+  [/\bmosquitto|mqtt/,                         "Hablando con MQTT"],
+  [/\b(python3?|node|bun|deno|ruby|php)\s/,    "Ejecutando un script"],
+  [/\b(mkdir|cp|mv|rm|touch|chmod)\b/,        "Moviendo ficheros"],
+  [/\b(ssh|scp|rsync)\b/,                     "Conectando a otra maquina"],
+  [/\becho\b|\bprintf\b/,                    "Escribiendo texto"],
+];
+
+function describeBash(cmd: string): string {
+  const c = cmd.toLowerCase();
+  for (const [re, txt] of BASH) if (re.test(c)) return txt;
+  // Sin receta: al menos el programa, que ya orienta.
+  const prog = cmd.trim().split(/\s+/)[0]?.split("/").pop() ?? "";
+  return prog ? `Ejecutando ${prog}` : "Ejecutando un comando";
+}
+
+/** "mcp__plugin_playwright_playwright__browser_take_screenshot" -> "Playwright: browser take screenshot" */
+function describeMcp(tool: string): string {
+  const parts = tool.split("__").filter(Boolean);
+  const accion = (parts.at(-1) ?? "").replace(/_/g, " ");
+  const server = (parts.at(-2) ?? "").split("_").filter(Boolean).at(-1) ?? "MCP";
+  const cap = server.charAt(0).toUpperCase() + server.slice(1);
+  return accion ? `${cap}: ${accion}` : cap;
+}
+
+export function describe(tool: string, input: Record<string, unknown>): string {
+  const pick = (k: string) => (typeof input[k] === "string" ? (input[k] as string) : undefined);
+  const file = () => basename(pick("file_path") ?? "") || "un fichero";
+
+  if (tool.startsWith("mcp__")) return truncate(describeMcp(tool), 40);
+
+  switch (tool) {
+    case "Bash":       return truncate(describeBash(pick("command") ?? ""), 40);
+    case "Read":       return truncate(`Leyendo ${file()}`, 40);
+    case "Edit":       return truncate(`Editando ${file()}`, 40);
+    case "Write":      return truncate(`Escribiendo ${file()}`, 40);
+    case "NotebookEdit": return truncate(`Editando ${file()}`, 40);
+    case "Grep":       return truncate(`Buscando "${pick("pattern") ?? ""}"`, 40);
+    case "Glob":       return truncate(`Buscando ficheros ${pick("pattern") ?? ""}`, 40);
+    case "WebFetch":   {
+      let host = pick("url") ?? "";
+      try { host = new URL(host).hostname.replace(/^www\./, ""); } catch { /* no es una URL */ }
+      return truncate(`Leyendo ${host}`, 40);
+    }
+    case "WebSearch":  return truncate(`Buscando en la web: ${pick("query") ?? ""}`, 40);
+    case "Task":
+    case "Agent":      return truncate(`Lanzando un subagente: ${pick("description") ?? ""}`, 40);
+    case "TodoWrite":  return "Actualizando su lista de tareas";
+    case "Skill":      return truncate(`Usando la skill ${pick("skill") ?? ""}`, 40);
+    case "Artifact":   return "Publicando un artifact";
+    default:           return truncate(tool, 40);
+  }
+}
+
 /** Primera linea util de la invocacion, para que se lea de un vistazo en la placa. */
 export function summarize(tool: string, input: Record<string, unknown>): string | null {
   const pick = (k: string) => (typeof input[k] === "string" ? (input[k] as string) : undefined);
@@ -265,10 +363,25 @@ function republish(sid: string): AgentState {
         status: best.status,
         tool: best.tool,
         detail: best.detail,
+        raw: best.raw,
         subType: best.type,
       };
     }
   }
+
+  // Con subagentes arrancados, la sesion NO esta en reposo aunque su propio
+  // turno haya terminado: esta esperandolos. Es lo que dice el terminal.
+  const esperando = pending.get(sid)?.size ?? 0;
+  if (esperando > 0 && (merged.status === "idle" || merged.status === "offline")) {
+    merged.status = "working";
+    if (!merged.detail) {
+      merged.detail = esperando === 1
+        ? "Esperando a un subagente"
+        : `Esperando a ${esperando} subagentes`;
+      merged.tool = null;
+    }
+  }
+  merged.subN = Math.max(merged.subN ?? 0, esperando);
 
   const prev = agents.get(sid);
   // 'since' solo se reinicia cuando cambia el estado: es el cronometro de la UI.
@@ -294,6 +407,7 @@ function upsert(h: HookBase, patch: Partial<AgentState>): AgentState {
       status: patch.status ?? "working",
       tool: patch.tool ?? null,
       detail: patch.detail ?? null,
+      raw: patch.raw ?? null,
       rx: Date.now(),
     });
   } else {
@@ -304,6 +418,7 @@ function upsert(h: HookBase, patch: Partial<AgentState>): AgentState {
       status: patch.status ?? prev?.status ?? "idle",
       tool: patch.tool !== undefined ? patch.tool : (prev?.tool ?? null),
       detail: patch.detail !== undefined ? patch.detail : (prev?.detail ?? null),
+      raw: patch.raw !== undefined ? patch.raw : (prev?.raw ?? null),
       since: prev?.since ?? now(),
       lastError: patch.lastError !== undefined ? patch.lastError : (prev?.lastError ?? null),
     });
@@ -313,7 +428,7 @@ function upsert(h: HookBase, patch: Partial<AgentState>): AgentState {
     // Llego antes un subagente que el SessionStart del padre.
     own.set(id, {
       id, label: labelOf(h, id), status: "idle",
-      tool: null, detail: null, since: now(), lastError: null,
+      tool: null, detail: null, raw: null, since: now(), lastError: null,
     });
   }
 
@@ -328,6 +443,7 @@ export function onSubagentStop(h: HookBase): AgentState | null {
   const id = agentIdOf(h), sub = subIdOf(h);
   if (!sub) return null;
   subs.get(id)?.delete(sub);
+  pending.get(id)?.delete(sub);
   if (!own.has(id)) return null;
   return republish(id);
 }
@@ -340,7 +456,8 @@ export function onPreTool(h: HookPreTool) {
   return upsert(h, {
     status: "working",
     tool: h.tool_name,
-    detail: summarize(h.tool_name, h.tool_input ?? {}),
+    detail: describe(h.tool_name, h.tool_input ?? {}),
+    raw: summarize(h.tool_name, h.tool_input ?? {}),
   });
 }
 
@@ -361,6 +478,7 @@ export function onSessionEnd(h: HookBase) {
     agents.delete(s.id);
     own.delete(s.id);
     subs.delete(s.id);
+    pending.delete(s.id);
     cwds.delete(s.id);
     titles.delete(s.id);
     reapers.delete(s.id);

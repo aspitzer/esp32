@@ -126,6 +126,7 @@ static void onMessage(char *topic, uint8_t *payload, unsigned int len) {
   a->status = agentStatusFromName(doc["status"] | "idle");
   strlcpy(a->tool,      doc["tool"]      | "", AG_TOOL_LEN);
   strlcpy(a->detail,    doc["detail"]    | "", AG_DETAIL_LEN);
+  strlcpy(a->raw,       doc["raw"]       | "", AG_DETAIL_LEN);
   strlcpy(a->lastError, doc["lastError"] | "", AG_ERROR_LEN);
   strlcpy(a->subType,   doc["subType"]   | "", AG_SUBTYPE_LEN);
   a->subN     = doc["subN"] | 0;

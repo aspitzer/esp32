@@ -31,7 +31,8 @@ Broker MQTT: Mosquitto local, sin TLS, en la LAN. QoS 1 salvo donde se indique.
 | `label` | string | nombre corto para la UI (≤ 24 chars) |
 | `status` | enum | `idle`, `thinking`, `working`, `waiting_permission`, `error`, `offline` |
 | `tool` | string \| null | herramienta en curso |
-| `detail` | string \| null | primera línea del comando o fichero, truncado a 64 chars |
+| `detail` | string \| null | qué está haciendo, en cristiano: "Editando net.cpp", "Lanzando los tests" |
+| `raw` | string \| null | el comando literal, para la pantalla de detalle |
 | `since` | number | epoch en segundos del último cambio de `status` |
 | `lastError` | string \| null | p. ej. `rate_limit`, `overloaded` |
 | `subN` | number | subagentes vivos bajo esta sesión |

@@ -37,7 +37,8 @@ struct Agent {
   char         label[AG_LABEL_LEN];
   AgentStatus  status;
   char         tool[AG_TOOL_LEN];
-  char         detail[AG_DETAIL_LEN];
+  char         detail[AG_DETAIL_LEN];   // explicativo: "Editando net.cpp"
+  char         raw[AG_DETAIL_LEN];      // el comando literal, para el detalle
   uint32_t     since;                 // epoch en segundos, del broker
   char         lastError[AG_ERROR_LEN];
   // Subagentes agrupados bajo esta sesion. El broker ya funde su estado con

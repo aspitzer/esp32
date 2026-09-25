@@ -1,5 +1,5 @@
 {
-  "_comment": "Fase 1 (telemetria). Pegar en ~/.claude/settings.json. El broker escucha solo en 127.0.0.1. Todos estos endpoints devuelven 200 con cuerpo vacio: no deciden nada. Exporta AGENT_BUS_TOKEN con el valor de broker/.env antes de arrancar Claude Code.",
+  "_comment": "Fase 1 (telemetria). Incluye SubagentStart/Stop: sin ellos una sesion que espera a sus subagentes aparece en reposo. Pegar en ~/.claude/settings.json. El broker escucha solo en 127.0.0.1. Todos estos endpoints devuelven 200 con cuerpo vacio: no deciden nada. Exporta AGENT_BUS_TOKEN con el valor de broker/.env antes de arrancar Claude Code.",
   "hooks": {
     "SessionStart": [
       {
@@ -8,8 +8,12 @@
             "type": "http",
             "url": "http://127.0.0.1:8787/hook/session-start",
             "timeout": 5,
-            "headers": { "X-Bus-Token": "$AGENT_BUS_TOKEN" },
-            "allowedEnvVars": ["AGENT_BUS_TOKEN"]
+            "headers": {
+              "X-Bus-Token": "$AGENT_BUS_TOKEN"
+            },
+            "allowedEnvVars": [
+              "AGENT_BUS_TOKEN"
+            ]
           }
         ]
       }
@@ -22,8 +26,12 @@
             "type": "http",
             "url": "http://127.0.0.1:8787/hook/pre-tool",
             "timeout": 5,
-            "headers": { "X-Bus-Token": "$AGENT_BUS_TOKEN" },
-            "allowedEnvVars": ["AGENT_BUS_TOKEN"]
+            "headers": {
+              "X-Bus-Token": "$AGENT_BUS_TOKEN"
+            },
+            "allowedEnvVars": [
+              "AGENT_BUS_TOKEN"
+            ]
           }
         ]
       }
@@ -35,8 +43,12 @@
             "type": "http",
             "url": "http://127.0.0.1:8787/hook/stop",
             "timeout": 5,
-            "headers": { "X-Bus-Token": "$AGENT_BUS_TOKEN" },
-            "allowedEnvVars": ["AGENT_BUS_TOKEN"]
+            "headers": {
+              "X-Bus-Token": "$AGENT_BUS_TOKEN"
+            },
+            "allowedEnvVars": [
+              "AGENT_BUS_TOKEN"
+            ]
           }
         ]
       }
@@ -49,8 +61,12 @@
             "type": "http",
             "url": "http://127.0.0.1:8787/hook/stop-failure",
             "timeout": 5,
-            "headers": { "X-Bus-Token": "$AGENT_BUS_TOKEN" },
-            "allowedEnvVars": ["AGENT_BUS_TOKEN"]
+            "headers": {
+              "X-Bus-Token": "$AGENT_BUS_TOKEN"
+            },
+            "allowedEnvVars": [
+              "AGENT_BUS_TOKEN"
+            ]
           }
         ]
       }
@@ -62,8 +78,46 @@
             "type": "http",
             "url": "http://127.0.0.1:8787/hook/session-end",
             "timeout": 5,
-            "headers": { "X-Bus-Token": "$AGENT_BUS_TOKEN" },
-            "allowedEnvVars": ["AGENT_BUS_TOKEN"]
+            "headers": {
+              "X-Bus-Token": "$AGENT_BUS_TOKEN"
+            },
+            "allowedEnvVars": [
+              "AGENT_BUS_TOKEN"
+            ]
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook/subagent-start",
+            "timeout": 5,
+            "headers": {
+              "X-Bus-Token": "$AGENT_BUS_TOKEN"
+            },
+            "allowedEnvVars": [
+              "AGENT_BUS_TOKEN"
+            ]
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook/subagent-stop",
+            "timeout": 5,
+            "headers": {
+              "X-Bus-Token": "$AGENT_BUS_TOKEN"
+            },
+            "allowedEnvVars": [
+              "AGENT_BUS_TOKEN"
+            ]
           }
         ]
       }

@@ -223,20 +223,23 @@ static void buildRows() {
     // baja a la segunda linea, donde compite con un texto secundario y no con
     // el titulo de la sesion. Antes ambos se peleaban por la misma linea y el
     // nombre se comia el hueco del reloj.
+    // Tres lineas por fila: nombre arriba pegado, y debajo dos de detalle que
+    // aprovechan el hueco que antes quedaba muerto. El cronometro vive en la
+    // columna derecha, fuera del ancho del texto, asi que nunca se solapan.
     r.label = mkLabel(r.root, &lv_font_montserrat_16, C_TXT);
     lv_label_set_long_mode(r.label, LV_LABEL_LONG_DOT);
-    lv_obj_set_pos(r.label, 15, 8);
+    lv_obj_set_pos(r.label, 15, 4);
     lv_obj_set_width(r.label, listW - 15 - 10);
 
     r.timer = mkLabel(r.root, &lv_font_montserrat_16, C_TXT);
     lv_obj_set_style_text_align(r.timer, LV_TEXT_ALIGN_RIGHT, 0);
     lv_obj_set_width(r.timer, TIMER_W);
-    lv_obj_set_pos(r.timer, listW - TIMER_W - 8, 34);
+    lv_obj_set_pos(r.timer, listW - TIMER_W - 8, 28);
 
     r.detail = mkLabel(r.root, &lv_font_montserrat_12, C_SOFT);
-    lv_label_set_long_mode(r.detail, LV_LABEL_LONG_DOT);
-    lv_obj_set_pos(r.detail, 15, 38);
-    lv_obj_set_width(r.detail, listW - 15 - TIMER_W - 16);
+    lv_label_set_long_mode(r.detail, LV_LABEL_LONG_WRAP);
+    lv_obj_set_pos(r.detail, 15, 27);
+    lv_obj_set_size(r.detail, listW - 15 - TIMER_W - 16, 40);
 
     // Toda la fila es el area tactil: 300x73, muy por encima del minimo de
     // 100x80 que exige el resistivo (el ancho compensa la altura).
@@ -414,7 +417,15 @@ static void refreshDetail() {
   setColorIfChanged(dStatus, col);
 
   setTextIfChanged(dTool, a->tool[0] ? a->tool : "-");
-  setTextIfChanged(dDetail, a->detail[0] ? a->detail : "(sin detalle)");
+
+  // Arriba lo explicativo y debajo el comando tal cual: la fila se lee de
+  // reojo, pero al tocar vienes justamente a ver que se ha ejecutado.
+  static char cuerpo[AG_DETAIL_LEN * 2 + 4];
+  if (a->raw[0] && strcmp(a->raw, a->detail) != 0)
+    snprintf(cuerpo, sizeof(cuerpo), "%s\n%s", a->detail, a->raw);
+  else
+    snprintf(cuerpo, sizeof(cuerpo), "%s", a->detail[0] ? a->detail : "(sin detalle)");
+  setTextIfChanged(dDetail, cuerpo);
 
   if (a->lastError[0]) {
     static char e[AG_ERROR_LEN + 16];

@@ -17,6 +17,7 @@ export interface AgentState {
   detail: string | null;
   since: number;            // epoch en segundos
   lastError: string | null;
+  raw?: string | null;      // el comando literal, para la pantalla de detalle
   subN?: number;            // subagentes activos bajo esta sesion
   subType?: string | null;  // tipo del subagente que manda ahora mismo
 }
