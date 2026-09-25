@@ -17,9 +17,13 @@
 #define AG_SUBTYPE_LEN 20
 
 /**
- * ST_STALLED no existe en el contrato MQTT: se deduce aqui. Un agente en
- * reposo mucho rato casi nunca esta "en reposo", esta esperandote a ti, y eso
- * tiene que verse distinto de una sesion que acaba de terminar su turno.
+ * ST_STALLED no existe en el contrato MQTT: se deduce de `awaiting`.
+ *
+ * Quieto y esperandote NO son lo mismo. Una sesion recuperada del disco esta
+ * quieta pero no sabemos si quiere algo; una que acaba de contestarte si te
+ * espera, y eso lo dice el broker con `awaiting` (lo pone el hook Stop, que
+ * significa "he terminado de contestar"). Antes se deducia del tiempo parado
+ * y marcaba como "te espera" a sesiones que no esperaban nada.
  */
 enum AgentStatus : uint8_t {
   ST_IDLE = 0,
@@ -32,8 +36,11 @@ enum AgentStatus : uint8_t {
   ST_COUNT,
 };
 
-/** Reposo a partir del cual se considera que la sesion te espera. */
-#define STALLED_AFTER_S (10 * 60)
+/**
+ * Margen antes de anunciar que te espera. Sin el, cada pausa normal de una
+ * conversacion en marcha saltaria a "TE ESPERA" durante unos segundos.
+ */
+#define STALLED_AFTER_S 60
 
 struct Agent {
   bool         used;
@@ -47,6 +54,7 @@ struct Agent {
   char         lastError[AG_ERROR_LEN];
   // Subagentes agrupados bajo esta sesion. El broker ya funde su estado con
   // el del padre; esto es solo para poder decir quien esta trabajando.
+  bool         awaiting;                // ha contestado y espera TU respuesta
   bool         tmux;                    // alcanzable por tmux: el boton escribe de verdad
   uint8_t      subN;
   char         subType[AG_SUBTYPE_LEN];

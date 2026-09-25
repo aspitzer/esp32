@@ -68,7 +68,8 @@ void agentRemove(const char *id) {
 }
 
 AgentStatus agentEffective(const Agent &a) {
-  if (a.status != ST_IDLE || a.since == 0) return a.status;
+  // Sin `awaiting` esta quieta, no esperandote: son cosas distintas.
+  if (a.status != ST_IDLE || !a.awaiting || a.since == 0) return a.status;
 
   const time_t now = time(nullptr);
   if (now < 1700000000) return a.status;          // sin hora NTP no se puede juzgar

@@ -35,6 +35,7 @@ Broker MQTT: Mosquitto local, sin TLS, en la LAN. QoS 1 salvo donde se indique.
 | `raw` | string \| null | el comando literal, para la pantalla de detalle |
 | `since` | number | epoch en segundos del último cambio de `status` |
 | `lastError` | string \| null | p. ej. `rate_limit`, `overloaded` |
+| `awaiting` | boolean | ha terminado de contestar y espera **tu** respuesta |
 | `tmux` | boolean | la sesión es alcanzable por `tmux send-keys` |
 | `subN` | number | subagentes vivos bajo esta sesión |
 | `subType` | string \| null | tipo del subagente cuyo estado manda ahora |

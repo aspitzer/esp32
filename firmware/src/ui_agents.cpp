@@ -665,7 +665,10 @@ static void refreshCards() {
         snprintf(line, sizeof(line), "ERROR - %s", a.lastError[0] ? a.lastError : "?");
         break;
       case ST_STALLED:
-        snprintf(line, sizeof(line), "TE ESPERA%s%s", a.detail[0] ? " - " : "", a.detail);
+        // El detalle aqui es lo ultimo que te dijo: mucho mas util que
+        // repetir "te espera" sin decir sobre que.
+        if (a.detail[0]) snprintf(line, sizeof(line), "%s", a.detail);
+        else             snprintf(line, sizeof(line), "TE ESPERA");
         break;
       default:
         // Si quien trabaja es un subagente, decirlo: la sesion padre puede

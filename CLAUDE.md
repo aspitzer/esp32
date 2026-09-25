@@ -106,6 +106,9 @@ oscuras no sabes dónde tocas y abajo hay botones que aprueban comandos.
   `¿`, ni el punto medio `·` que usé de separador durante días. Se comprueba
   leyendo el `unicode_list` del `.c` de la fuente, no suponiendo. El broker
   translitera; el firmware usa `-` y `>`.
+- **Quieto y esperándote no son lo mismo.** `Stop` significa "he terminado de
+  contestar, te toca": esa es la señal, no el tiempo parado. Deducirlo del reloj
+  marcaba como "te espera" a sesiones que no esperaban nada.
 - **Dos sesiones pueden llamarse igual.** Tener dos "brain" abiertas es normal;
   si no se distinguen, la pantalla deja de servir (una dice "te espera" y la
   otra trabaja, y no sabes cuál es cuál). Cuando el nombre se repite se le pega

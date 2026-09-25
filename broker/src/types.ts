@@ -18,6 +18,7 @@ export interface AgentState {
   since: number;            // epoch en segundos
   lastError: string | null;
   raw?: string | null;      // el comando literal, para la pantalla de detalle
+  awaiting?: boolean;       // ha contestado y espera TU respuesta
   tmux?: boolean;           // la sesion es alcanzable por tmux send-keys
   subN?: number;            // subagentes activos bajo esta sesion
   subType?: string | null;  // tipo del subagente que manda ahora mismo

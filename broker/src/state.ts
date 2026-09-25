@@ -416,6 +416,7 @@ function republish(sid: string, sinHermanas = false): AgentState {
   // la conversacion viva. Si no, lo unico posible es abrir una sesion nueva,
   // y eso hay que decirlo ANTES de pulsar, no despues.
   merged.tmux = hasPaneFor(cwds.get(sid));
+  merged.awaiting = base.awaiting === true && merged.status === "idle";
 
   const prev = agents.get(sid);
   // 'since' solo se reinicia cuando cambia el estado: es el cronometro de la UI.
@@ -449,6 +450,7 @@ function upsert(h: HookBase, patch: Partial<AgentState>): AgentState {
     const prev = own.get(id);
     own.set(id, {
       id,
+      awaiting: false,          // si pasa cualquier otra cosa, ya no te espera
       label: labelOf(h, id),
       status: patch.status ?? prev?.status ?? "idle",
       tool: patch.tool !== undefined ? patch.tool : (prev?.tool ?? null),
@@ -511,8 +513,26 @@ export function onUserPrompt(h: HookBase & { prompt?: string }) {
   });
 }
 
-export function onStop(h: HookBase) {
-  return upsert(h, { status: "idle", tool: null, detail: null });
+/**
+ * Stop no es "parado": es "he terminado de contestar y la pelota esta en tu
+ * tejado". Es la unica señal fiable de que una sesion te espera A TI, y no la
+ * misma que estar simplemente quieta —una recuperada del disco esta quieta,
+ * pero no sabemos si quiere algo—.
+ *
+ * El evento trae el ultimo mensaje del asistente, asi que la tarjeta puede
+ * decir sobre QUE te espera en vez de solo que espera.
+ */
+export function onStop(h: HookBase & { last_assistant_message?: string }) {
+  const dicho = (h.last_assistant_message ?? "").replace(/\s+/g, " ").trim();
+  const st = upsert(h, {
+    status: "idle",
+    tool: null,
+    detail: dicho ? truncate(dicho, 60) : null,
+    raw: dicho ? truncate(dicho, 64) : null,
+  });
+  const o = own.get(agentIdOf(h));
+  if (o) { o.awaiting = true; }
+  return republish(agentIdOf(h));
 }
 
 export function onStopFailure(h: HookStopFailure) {
@@ -600,6 +620,9 @@ export async function seedFromDisk(maxAgeH = 12): Promise<number> {
       const carpeta = cwd ? (cwd.split("/").filter(Boolean).at(-1) ?? id) : id;
       own.set(id, {
         id,
+        // Recuperada del disco: esta quieta, pero no hay forma de saber si
+        // espera algo. Quieta y esperandote no son lo mismo.
+        awaiting: false,
         label: shortLabel(titulo ?? carpeta),
         status: "idle",
         tool: null,
