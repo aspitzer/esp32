@@ -27,6 +27,7 @@ const HOOK_PATHS = [
   "/hook/stop",
   "/hook/stop-failure",
   "/hook/session-end",
+  "/hook/subagent-stop",
   "/hook/permission",
 ] as const;
 
@@ -110,6 +111,11 @@ const server = Bun.serve({
       case "/hook/stop-failure": {
         const h = await body<HookStopFailure>(req);
         if (h) log(state.onStopFailure(h));
+        return ok();
+      }
+      case "/hook/subagent-stop": {
+        const h = await body<HookBase>(req);
+        if (h) { const s = state.onSubagentStop(h); if (s) log(s); }
         return ok();
       }
       case "/hook/session-end": {

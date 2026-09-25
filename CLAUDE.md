@@ -100,6 +100,12 @@ oscuras no sabes dónde tocas y abajo hay botones que aprueban comandos.
 - **No pases separadores escritos como escape (`\t`) a un subproceso.** Se
   perdió por el camino y los campos llegaron pegados, en silencio. Un campo
   por llamada, o un separador construido en tiempo de ejecución y validado.
+- **Las fuentes Montserrat de LVGL son ASCII y nada más.** Ni tildes, ni ñ, ni
+  `¿`, ni el punto medio `·` que usé de separador durante días. Se comprueba
+  leyendo el `unicode_list` del `.c` de la fuente, no suponiendo. El broker
+  translitera; el firmware usa `-` y `>`.
+- **Un subagente no es una fila.** Se agrupa bajo su sesión, o ves el mismo
+  nombre dos veces (padre en reposo, hijo trabajando) sin forma de relacionarlos.
 - **En un botón, color de borde y color de texto son cosas distintas.** Reusar
   uno para ambos dejó `VOLVER` en gris #2E2E2E sobre panel #101010: ilegible.
   Y en TN un borde a #2E2E2E tampoco se distingue del fondo; los botones

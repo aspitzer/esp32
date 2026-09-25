@@ -1,4 +1,4 @@
-# Contrato MQTT — v2
+# Contrato MQTT — v3
 
 Interfaz estable entre `broker/` y `firmware/`. **Cambiarla implica cambiar los dos
 lados en el mismo commit y subir la versión de este documento.**
@@ -19,7 +19,9 @@ Broker MQTT: Mosquitto local, sin TLS, en la LAN. QoS 1 salvo donde se indique.
   "tool": "Bash",
   "detail": "pytest tests/",
   "since": 1758200000,
-  "lastError": null
+  "lastError": null,
+  "subN": 1,
+  "subType": "general-purpose"
 }
 ```
 
@@ -32,6 +34,21 @@ Broker MQTT: Mosquitto local, sin TLS, en la LAN. QoS 1 salvo donde se indique.
 | `detail` | string \| null | primera línea del comando o fichero, truncado a 64 chars |
 | `since` | number | epoch en segundos del último cambio de `status` |
 | `lastError` | string \| null | p. ej. `rate_limit`, `overloaded` |
+| `subN` | number | subagentes vivos bajo esta sesión |
+| `subType` | string \| null | tipo del subagente cuyo estado manda ahora |
+
+**Una fila = una sesión.** Los subagentes no tienen topic propio: se agrupan
+bajo su sesión y el broker publica el estado *fundido*. Gana el más
+interesante de los dos lados, salvo `error` y `waiting_permission` del padre,
+que mandan siempre porque te reclaman a ti.
+
+**Todo el payload es ASCII.** Las fuentes Montserrat de LVGL no traen tildes,
+ni ñ, ni `¿`, ni el punto medio: verificado leyendo el cmap del `.c` de la
+fuente. El broker translitera antes de publicar, así la placa no tiene que
+saber nada de esto.
+
+`label` sale del `aiTitle` del transcript de Claude Code — el título real de
+la sesión — y cae al nombre de la carpeta si aún no se ha leído.
 
 Retained es clave: la placa reinicia y repinta al instante sin pedir nada.
 Al terminar una sesión el broker publica `status: "offline"`, también retained.

@@ -81,7 +81,7 @@ static void onMessage(char *topic, uint8_t *payload, unsigned int len) {
     StaticJsonDocument<256> doc;
     if (deserializeJson(doc, payload, len)) return;
     const bool ok = doc["ok"] | false;
-    snprintf(actionResult, sizeof(actionResult), "%s %s \xC2\xB7 %s",
+    snprintf(actionResult, sizeof(actionResult), "%s %s - %s",
              ok ? "OK" : "FALLO", (const char *)(doc["via"] | "?"),
              (const char *)(doc["detail"] | ""));
     Serial.printf("[act ] %s\n", actionResult);
@@ -122,6 +122,8 @@ static void onMessage(char *topic, uint8_t *payload, unsigned int len) {
   strlcpy(a->tool,      doc["tool"]      | "", AG_TOOL_LEN);
   strlcpy(a->detail,    doc["detail"]    | "", AG_DETAIL_LEN);
   strlcpy(a->lastError, doc["lastError"] | "", AG_ERROR_LEN);
+  strlcpy(a->subType,   doc["subType"]   | "", AG_SUBTYPE_LEN);
+  a->subN     = doc["subN"] | 0;
   a->since    = doc["since"] | 0;
   a->rxMillis = millis();
 

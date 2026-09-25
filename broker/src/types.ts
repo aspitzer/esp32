@@ -17,6 +17,8 @@ export interface AgentState {
   detail: string | null;
   since: number;            // epoch en segundos
   lastError: string | null;
+  subN?: number;            // subagentes activos bajo esta sesion
+  subType?: string | null;  // tipo del subagente que manda ahora mismo
 }
 
 export interface PermRequest {

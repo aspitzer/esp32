@@ -410,9 +410,13 @@ static void refreshDetail() {
     setTextIfChanged(dError, "");
   }
 
-  static char meta[64], el[10];
+  static char meta[96], el[10];
   fmtElapsed(el, sizeof(el), a->since);
-  snprintf(meta, sizeof(meta), "id %s   en este estado %s", a->id, el);
+  if (a->subN > 0)
+    snprintf(meta, sizeof(meta), "id %s   %s   %u subagente%s activo%s",
+             a->id, el, a->subN, a->subN == 1 ? "" : "s", a->subN == 1 ? "" : "s");
+  else
+    snprintf(meta, sizeof(meta), "id %s   en este estado %s", a->id, el);
   setTextIfChanged(dMeta, meta);
 }
 
@@ -545,7 +549,7 @@ static void refreshAvatar() {
 
   static char buf[28];
   if (total == 0) snprintf(buf, sizeof(buf), "esperando eventos");
-  else            snprintf(buf, sizeof(buf), "%u activos \xC2\xB7 %u en total", busy, total);
+  else            snprintf(buf, sizeof(buf), "%u activos - %u en total", busy, total);
   setTextIfChanged(lblCount, buf);
 }
 
@@ -572,10 +576,10 @@ static void refreshRows() {
     static char line[AG_TOOL_LEN + AG_DETAIL_LEN + 8];
     switch (st) {
       case ST_WAITING_PERMISSION:
-        snprintf(line, sizeof(line), "ESPERA PERMISO \xC2\xB7 %s", a.tool);
+        snprintf(line, sizeof(line), "ESPERA PERMISO - %s", a.tool);
         break;
       case ST_ERROR:
-        snprintf(line, sizeof(line), "ERROR \xC2\xB7 %s", a.lastError[0] ? a.lastError : "?");
+        snprintf(line, sizeof(line), "ERROR - %s", a.lastError[0] ? a.lastError : "?");
         break;
       case ST_OFFLINE:
         snprintf(line, sizeof(line), "SESION TERMINADA");
@@ -587,8 +591,16 @@ static void refreshRows() {
         snprintf(line, sizeof(line), "TE ESPERA");
         break;
       default:
-        if (a.detail[0]) snprintf(line, sizeof(line), "%s \xC2\xB7 %s", a.tool, a.detail);
-        else             snprintf(line, sizeof(line), "%s", a.tool);
+        // Si quien trabaja es un subagente, decirlo: la sesion padre puede
+        // estar parada y aun asi la fila tiene que contar la verdad.
+        if (a.subType[0] && a.detail[0])
+          snprintf(line, sizeof(line), ">%s - %s", a.subType, a.detail);
+        else if (a.subType[0])
+          snprintf(line, sizeof(line), ">%s - %s", a.subType, a.tool);
+        else if (a.detail[0])
+          snprintf(line, sizeof(line), "%s - %s", a.tool, a.detail);
+        else
+          snprintf(line, sizeof(line), "%s", a.tool);
         break;
     }
     setTextIfChanged(r.detail, line);

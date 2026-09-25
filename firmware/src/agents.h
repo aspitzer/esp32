@@ -10,6 +10,7 @@
 #define AG_TOOL_LEN    18
 #define AG_DETAIL_LEN  68
 #define AG_ERROR_LEN   24
+#define AG_SUBTYPE_LEN 20
 
 /**
  * ST_STALLED no existe en el contrato MQTT: se deduce aqui. Un agente en
@@ -39,6 +40,10 @@ struct Agent {
   char         detail[AG_DETAIL_LEN];
   uint32_t     since;                 // epoch en segundos, del broker
   char         lastError[AG_ERROR_LEN];
+  // Subagentes agrupados bajo esta sesion. El broker ya funde su estado con
+  // el del padre; esto es solo para poder decir quien esta trabajando.
+  uint8_t      subN;
+  char         subType[AG_SUBTYPE_LEN];
   uint32_t     rxMillis;              // cuando llego, para ordenar
 };
 

@@ -50,9 +50,9 @@ static lv_color_t riskColor(PermRisk r) {
 
 static const char *riskName(PermRisk r) {
   switch (r) {
-    case RISK_LOW:    return "PERMISO \xC2\xB7 RIESGO BAJO";
-    case RISK_MEDIUM: return "PERMISO \xC2\xB7 RIESGO MEDIO";
-    default:          return "PERMISO \xC2\xB7 RIESGO ALTO";
+    case RISK_LOW:    return "PERMISO - RIESGO BAJO";
+    case RISK_MEDIUM: return "PERMISO - RIESGO MEDIO";
+    default:          return "PERMISO - RIESGO ALTO";
   }
 }
 
