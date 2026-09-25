@@ -100,14 +100,19 @@ AgentStatus agentsAggregate() {
   return ST_OFFLINE;
 }
 
-/** Orden de interes: permiso, error, te espera, trabajo, pensando, reposo, offline. */
+/**
+ * Orden de interes. Lo que esta PASANDO ahora va arriba: una sesion trabajando
+ * o rota es informacion viva, y una que lleva rato esperandote puede aguantar
+ * unas lineas mas abajo. Antes "te espera" adelantaba a las que trabajaban y
+ * la pantalla enseñaba lo quieto por encima de lo vivo.
+ */
 static uint8_t rank(AgentStatus s) {
   switch (s) {
-    case ST_WAITING_PERMISSION: return 0;
+    case ST_WAITING_PERMISSION: return 0;   // te bloquea AHORA
     case ST_ERROR:              return 1;
-    case ST_STALLED:            return 2;
-    case ST_WORKING:            return 3;
-    case ST_THINKING:           return 4;
+    case ST_WORKING:            return 2;
+    case ST_THINKING:           return 3;
+    case ST_STALLED:            return 4;
     case ST_IDLE:               return 5;
     default:                    return 6;
   }

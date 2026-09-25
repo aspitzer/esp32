@@ -106,6 +106,13 @@ oscuras no sabes dónde tocas y abajo hay botones que aprueban comandos.
   `¿`, ni el punto medio `·` que usé de separador durante días. Se comprueba
   leyendo el `unicode_list` del `.c` de la fuente, no suponiendo. El broker
   translitera; el firmware usa `-` y `>`.
+- **Dos sesiones pueden llamarse igual.** Tener dos "brain" abiertas es normal;
+  si no se distinguen, la pantalla deja de servir (una dice "te espera" y la
+  otra trabaja, y no sabes cuál es cuál). Cuando el nombre se repite se le pega
+  el principio del id: `brain #0d7a`.
+- **Arriba va lo que está pasando, no lo que espera.** Una sesión trabajando o
+  rota es información viva; una que lleva rato esperándote aguanta unas líneas
+  más abajo.
 - **El nombre de una sesión es el que le puso el humano**, en
   `custom-title.json`, no el `aiTitle` automático ni la carpeta. Si alguien se
   molesta en llamar a una sesión "brain", eso es lo que quiere leer.

@@ -332,6 +332,34 @@ export function summarize(tool: string, input: Record<string, unknown>): string 
 /** Estado propio de la sesion, sin contar subagentes. */
 const own = new Map<string, AgentState>();
 
+/** Nombre base de cada sesion, antes de desambiguar. */
+const bases = new Map<string, string>();
+
+/**
+ * Dos sesiones pueden llamarse igual —es normal tener dos "brain" abiertas— y
+ * entonces la pantalla no sirve: una decia "te espera" y la otra estaba
+ * trabajando, sin forma de saber cual era cual. Cuando el nombre se repite se
+ * le pega el principio del id a TODAS las que lo compartan.
+ */
+function distinguir(sid: string, base: string): string {
+  bases.set(sid, base);
+
+  let repetido = false;
+  for (const [otro, b] of bases) {
+    if (otro !== sid && b === base && own.has(otro)) { repetido = true; break; }
+  }
+  return repetido ? `${base} #${sid.slice(0, 4)}` : base;
+}
+
+/** Cuando aparece un nombre repetido hay que repintar tambien al otro. */
+function republishHermanas(sid: string) {
+  const base = bases.get(sid);
+  if (!base) return;
+  for (const [otro, b] of bases) {
+    if (otro !== sid && b === base && own.has(otro)) republish(otro, true);
+  }
+}
+
 /**
  * Lo que se publica es la sesion FUNDIDA con sus subagentes: gana el estado
  * mas interesante de los dos lados. Un padre en reposo con un subagente
@@ -341,7 +369,7 @@ const own = new Map<string, AgentState>();
  * error y waiting_permission del PADRE mandan siempre: son cosas que te
  * reclaman a ti, no trabajo de fondo.
  */
-function republish(sid: string): AgentState {
+function republish(sid: string, sinHermanas = false): AgentState {
   const base = own.get(sid)!;
   const ss = liveSubs(sid);
 
@@ -351,7 +379,7 @@ function republish(sid: string): AgentState {
   const titulo = titles.get(sid);
   let merged: AgentState = {
     ...base,
-    label: titulo ? shortLabel(titulo) : base.label,
+    label: distinguir(sid, titulo ? shortLabel(titulo) : base.label),
     subN: ss.length,
     subType: null,
   };
@@ -395,6 +423,7 @@ function republish(sid: string): AgentState {
 
   agents.set(sid, merged);
   publishAgentState(merged);
+  if (!sinHermanas) republishHermanas(sid);
   return merged;
 }
 
@@ -498,6 +527,7 @@ export function onSessionEnd(h: HookBase) {
     clearAgentState(s.id);
     agents.delete(s.id);
     own.delete(s.id);
+    bases.delete(s.id);
     subs.delete(s.id);
     pending.delete(s.id);
     cwds.delete(s.id);
