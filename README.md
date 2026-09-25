@@ -51,17 +51,22 @@ cd broker && bun run tools/mock-agent.ts --agents 4 --speed 2
 |---|---|---|
 | Lista | inicio | Avatar + hasta 4 agentes con color de estado, herramienta y cronómetro |
 | Detalle | tocando una fila | Comando completo sin truncar, último error, id, tiempo en ese estado |
-| Acciones | botón en el detalle | CONTINUA · TESTS · ESTADO · PARAR. Se elige tocando, **se lanza con BOOT** |
-| Permiso | automática | Comando, riesgo, cuenta atrás. Se elige tocando, **se confirma con BOOT** |
+| Acciones | botón en el detalle | CONTINUA · TESTS · ESTADO · PARAR. Se elige tocando y **se lanza con un segundo toque** |
+| Permiso | automática | Comando, riesgo, cuenta atrás. Se elige tocando y **se confirma con un segundo toque** |
 
 ## Las decisiones que no son obvias
 
-**El toque nunca ejecuta nada por sí solo**, ni en permisos ni en acciones. El
-táctil resistivo se dispara con el dedo plano. Una aprobación accidental
-ejecuta un `rm -rf`; una acción accidental sobre una sesión que no está en
-tmux lanza un `claude -p`, o sea **una sesión de Claude autónoma de verdad**
-en ese directorio, que gasta tokens y toca ficheros. Tocar selecciona;
-ejecutar es siempre el botón físico BOOT.
+**Un solo toque nunca ejecuta nada**, ni en permisos ni en acciones. El táctil
+resistivo se dispara con el dedo plano: una aprobación accidental ejecuta un
+`rm -rf`, y una acción accidental sobre una sesión que no esté en tmux lanza
+un `claude -p`, o sea **una sesión de Claude autónoma de verdad** en ese
+directorio.
+
+La protección es **geométrica, no un botón físico**. Al elegir, los botones se
+sustituyen por confirmar y cancelar, y confirmar cae siempre a la izquierda —
+donde estaba la opción inocua. Repetir el toque en el mismo punto cancela, o
+en el peor caso confirma una denegación. BOOT sigue funcionando como atajo,
+pero no hace falta para nada.
 
 **En modo `auto` la placa se enciende poco, y es lo correcto.** Con
 `permissions.defaultMode: "auto"` el clasificador de Claude Code aprueba solo

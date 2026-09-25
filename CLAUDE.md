@@ -13,10 +13,13 @@ muestra el estado de N agentes de Claude Code y permite aprobar/denegar sus perm
 2. **Sin TLS en la placa.** MQTT plano en la LAN. Todo el cifrado lo hace el broker.
 3. **Táctil resistivo de un punto.** Sin gestos ni swipes. Calibración persistida en
    NVS. Áreas táctiles mínimo 100x80 px.
-4. **Nada se ejecuta con un solo toque. Confirmar siempre con BOOT (GPIO0).**
-   Vale para los permisos y para las acciones de la fase 4: un toque selecciona,
-   BOOT ejecuta. Sin esto, un roce lanza un `claude -p`, que es una sesión
-   autónoma real en ese directorio, o aprueba un `rm -rf`.
+4. **Nada se ejecuta con un solo toque: confirmación en dos pasos, toda táctil.**
+   Vale para permisos y para acciones. Un toque elige; un segundo toque, en
+   **otra zona de la pantalla**, ejecuta. La protección es geométrica: confirmar
+   siempre cae a la izquierda, donde estaba la opción inocua, y cancelar a la
+   derecha. Repetir el toque en el mismo sitio nunca aprueba ni lanza nada.
+   BOOT sigue valiendo como atajo, pero **no puede ser obligatorio**: un aparato
+   táctil que exige un botón físico es un mal aparato.
 5. **IO35 e IO39 son input-only** y sin pull-up interno. No usarlos como salida ni
    como botón sin resistencia externa.
 6. **IO25 sirve de SCL en el header I2C y de DAC1 del ESP32.** Verificar en el
@@ -101,6 +104,10 @@ oscuras no sabes dónde tocas y abajo hay botones que aprueban comandos.
   uno para ambos dejó `VOLVER` en gris #2E2E2E sobre panel #101010: ilegible.
   Y en TN un borde a #2E2E2E tampoco se distingue del fondo; los botones
   neutros usan #7A7A7A.
+- **No publicar agentes de prueba en el bus de verdad.** Un retained falso se
+  queda en la pantalla del usuario, y como no viene de un hook el broker no
+  sabe su directorio: las acciones sobre él fallan con un mensaje que parece
+  un bug del sistema. Usar `mock-agent.ts`, que limpia al salir.
 - **Un proceso que muere sin `SessionEnd` deja un fantasma retained.** El mock
   tiene que simular también el cierre limpio, porque es el caso que reproduce.
 

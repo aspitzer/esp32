@@ -47,12 +47,15 @@ static char      detailId[AG_ID_LEN] = {0};
 
 // --- pantalla de acciones (fase 4) -------------------------------------------
 //
-// Mismo contrato que los permisos: el toque SOLO selecciona, BOOT ejecuta.
-// Sin esto, un roce en el tactil resistivo lanzaba una sesion de Claude
-// autonoma de verdad en ese directorio, que gasta tokens y toca ficheros.
+// Mismo contrato que los permisos: confirmacion en dos pasos, toda tactil.
+// Un roce suelto no puede lanzar nada, porque una accion sobre una sesion que
+// no esta en tmux arranca un claude -p, o sea una sesion autonoma de verdad.
+// Confirmar cae a la IZQUIERDA y cancelar a la derecha, en una banda distinta
+// de la de los botones de accion: repetir un toque nunca ejecuta.
 #define ACTION_COUNT 4
 
 static lv_obj_t   *actionsScr, *lblActAgent, *lblActResult;
+static lv_obj_t   *btnActBack, *btnActOk, *btnActCancel;
 static lv_obj_t   *actBtn[ACTION_COUNT];
 static lv_color_t  actColor[ACTION_COUNT];
 static const char *actId[ACTION_COUNT];
@@ -157,11 +160,12 @@ static void buildAvatar() {
 
   avatarCreate(panel);
 
+  // Debajo de la boca, que ocupa hasta y=+68.
   lblMood = mkLabel(panel, &lv_font_montserrat_16, C_TXT);
-  lv_obj_align(lblMood, LV_ALIGN_CENTER, 0, 34);
+  lv_obj_align(lblMood, LV_ALIGN_CENTER, 0, 92);
 
   lblCount = mkLabel(panel, &lv_font_montserrat_12, C_DIM);
-  lv_obj_align(lblCount, LV_ALIGN_CENTER, 0, 58);
+  lv_obj_align(lblCount, LV_ALIGN_CENTER, 0, 116);
 }
 
 static void refreshDetail();
@@ -274,16 +278,38 @@ static void paintActionChoice() {
     if (l) lv_obj_set_style_text_color(l, on ? C_BG : actColor[i], 0);
   }
 
+  const bool step1 = (actChosen < 0);
+
+  if (step1) lv_obj_clear_flag(btnActBack, LV_OBJ_FLAG_HIDDEN);
+  else       lv_obj_add_flag(btnActBack, LV_OBJ_FLAG_HIDDEN);
+  for (lv_obj_t *o : { btnActOk, btnActCancel }) {
+    if (step1) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
+    else       lv_obj_clear_flag(o, LV_OBJ_FLAG_HIDDEN);
+  }
+
   static char hint[64];
-  if (actChosen < 0) {
-    setTextIfChanged(lblActResult, "toca una accion; se lanza con BOOT");
+  if (step1) {
+    setTextIfChanged(lblActResult, "toca una accion para elegirla");
     setColorIfChanged(lblActResult, C_DIM);
   } else {
-    snprintf(hint, sizeof(hint), "PULSA BOOT PARA %s", actLabel[actChosen]);
+    snprintf(hint, sizeof(hint), "confirma para lanzar %s", actLabel[actChosen]);
     setTextIfChanged(lblActResult, hint);
     setColorIfChanged(lblActResult, actColor[actChosen]);
+
+    lv_obj_t *l = lv_obj_get_child(btnActOk, 0);
+    if (l) {
+      static char ok[32];
+      snprintf(ok, sizeof(ok), "SI, %s", actLabel[actChosen]);
+      lv_label_set_text(l, ok);
+      lv_obj_set_style_text_color(l, C_BG, 0);
+    }
+    lv_obj_set_style_bg_color(btnActOk, actColor[actChosen], 0);
+    lv_obj_set_style_border_color(btnActOk, actColor[actChosen], 0);
   }
 }
+
+static void actCancel(lv_event_t *) { actChosen = -1; paintActionChoice(); }
+static void actGo(lv_event_t *)     { uiActionsConfirm(); }
 
 /** El indice viaja como user_data; el id es una constante de flash. */
 static void actionPicked(lv_event_t *e) {
@@ -364,12 +390,13 @@ static void refreshDetail() {
     return;
   }
 
-  const lv_color_t col = lv_color_hex(agentColor(a->status));
+  const AgentStatus st  = agentEffective(*a);
+  const lv_color_t  col = lv_color_hex(agentColor(st));
 
   setTextIfChanged(dLabel, a->label);
   setColorIfChanged(dLabel, C_TXT);
 
-  setTextIfChanged(dStatus, agentStatusName(a->status));
+  setTextIfChanged(dStatus, st == ST_STALLED ? "te espera" : agentStatusName(st));
   setColorIfChanged(dStatus, col);
 
   setTextIfChanged(dTool, a->tool[0] ? a->tool : "-");
@@ -418,8 +445,15 @@ static void buildActions() {
   lv_obj_set_width(lblActResult, SCREEN_W - 28);
   lv_label_set_long_mode(lblActResult, LV_LABEL_LONG_DOT);
 
-  mkBigButton(actionsScr, 14, 246, SCREEN_W - 28, 64, "VOLVER", C_BTN, C_TXT,
-              actionsBack, nullptr);
+  btnActBack = mkBigButton(actionsScr, 14, 246, SCREEN_W - 28, 64, "VOLVER",
+                           C_BTN, C_TXT, actionsBack, nullptr);
+
+  // Banda de confirmacion, en el sitio del VOLVER y lejos de los botones de
+  // accion: para lanzar algo hay que tocar dos zonas distintas de la pantalla.
+  btnActOk     = mkBigButton(actionsScr, 14,  246, 300, 64, "SI", C_BTN, C_BG,
+                             actGo, nullptr);
+  btnActCancel = mkBigButton(actionsScr, 318, 246, 148, 64, "NO", C_BTN, C_TXT,
+                             actCancel, nullptr);
 }
 
 static void showActions() {
@@ -489,7 +523,8 @@ static void refreshTopbar() {
 
 static void refreshAvatar() {
   static const char *MOOD[ST_COUNT] = {
-    "EN REPOSO", "PENSANDO", "TRABAJANDO", "PIDE PERMISO", "ERROR", "SIN AGENTES",
+    "EN REPOSO", "PENSANDO", "TRABAJANDO", "PIDE PERMISO", "ERROR",
+    "TE ESPERA", "SIN AGENTES",
   };
 
   const AgentStatus agg = agentsAggregate();
@@ -504,7 +539,8 @@ static void refreshAvatar() {
   for (const auto &a : agents) {
     if (!a.used) continue;
     total++;
-    if (a.status == ST_WORKING || a.status == ST_THINKING) busy++;
+    const AgentStatus st = agentEffective(a);
+    if (st == ST_WORKING || st == ST_THINKING) busy++;
   }
 
   static char buf[28];
@@ -526,14 +562,15 @@ static void refreshRows() {
     }
     lv_obj_clear_flag(r.root, LV_OBJ_FLAG_HIDDEN);
 
-    const Agent     &a   = agents[idx[i]];
-    const lv_color_t col = lv_color_hex(agentColor(a.status));
+    const Agent      &a   = agents[idx[i]];
+    const AgentStatus st  = agentEffective(a);
+    const lv_color_t  col = lv_color_hex(agentColor(st));
 
     lv_obj_set_style_bg_color(r.bar, col, 0);
     setTextIfChanged(r.label, a.label);
 
     static char line[AG_TOOL_LEN + AG_DETAIL_LEN + 8];
-    switch (a.status) {
+    switch (st) {
       case ST_WAITING_PERMISSION:
         snprintf(line, sizeof(line), "ESPERA PERMISO \xC2\xB7 %s", a.tool);
         break;
@@ -546,19 +583,23 @@ static void refreshRows() {
       case ST_IDLE:
         snprintf(line, sizeof(line), "EN REPOSO");
         break;
+      case ST_STALLED:
+        snprintf(line, sizeof(line), "TE ESPERA");
+        break;
       default:
         if (a.detail[0]) snprintf(line, sizeof(line), "%s \xC2\xB7 %s", a.tool, a.detail);
         else             snprintf(line, sizeof(line), "%s", a.tool);
         break;
     }
     setTextIfChanged(r.detail, line);
-    setColorIfChanged(r.detail, a.status == ST_WORKING ? C_SOFT : col);
+    setColorIfChanged(r.detail, st == ST_WORKING ? C_SOFT : col);
 
     static char t[10];
     fmtElapsed(t, sizeof(t), a.since);
     setTextIfChanged(r.timer, t);
     setColorIfChanged(
-        r.timer, (a.status == ST_ERROR || a.status == ST_WAITING_PERMISSION) ? col : C_TXT);
+        r.timer,
+        (st == ST_ERROR || st == ST_WAITING_PERMISSION || st == ST_STALLED) ? col : C_TXT);
   }
 }
 

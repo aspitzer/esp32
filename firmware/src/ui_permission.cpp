@@ -7,15 +7,28 @@
 #include "net.h"
 #include "ui_agents.h"
 
-// Restriccion 4 del proyecto: el tactil resistivo se dispara solo con el dedo
-// plano, y aqui una aprobacion accidental ejecuta un comando destructivo. Por
-// eso el toque SOLO selecciona. La decision se confirma con BOOT, siempre.
+/**
+ * Confirmacion en dos pasos, toda tactil.
+ *
+ * El tactil resistivo se dispara con el dedo plano y aqui un acierto casual
+ * ejecuta un comando destructivo, asi que un solo toque no puede decidir. Pero
+ * exigir un boton fisico en un aparato tactil es un mal aparato.
+ *
+ * La proteccion sale de la GEOMETRIA: el boton de confirmar aparece en el lado
+ * IZQUIERDO, donde estaba DENEGAR, y cancelar ocupa el derecho, donde estaba
+ * PERMITIR. Asi un doble toque en el mismo sitio nunca aprueba: repetir sobre
+ * PERMITIR cancela, y repetir sobre DENEGAR confirma una denegacion, que es
+ * inofensiva.
+ *
+ * BOOT sigue funcionando como atajo, pero ya no hace falta para nada.
+ */
 enum Choice : uint8_t { CH_NONE = 0, CH_DENY, CH_ALLOW };
 
 static lv_obj_t *scr;
 static lv_obj_t *header, *lblRisk, *lblAgent, *lblTool, *lblLeft;
 static lv_obj_t *box, *lblCmd, *barBg, *barFill;
 static lv_obj_t *btnDeny, *btnAllow, *lblDeny, *lblAllow, *lblHint;
+static lv_obj_t *btnConfirm, *btnCancel, *lblConfirm, *lblCancel;
 
 static Choice   choice     = CH_NONE;
 static bool     active     = false;
@@ -45,37 +58,48 @@ static const char *riskName(PermRisk r) {
 
 bool uiPermissionActive() { return active; }
 
-/** Marca visualmente la seleccion. Sin esto no sabes que vas a confirmar. */
+/** Alterna entre el paso de elegir y el de confirmar. */
 static void paintChoice() {
-  const bool d = (choice == CH_DENY), a = (choice == CH_ALLOW);
+  const bool step1 = (choice == CH_NONE);
+  const bool deny  = (choice == CH_DENY);
 
-  lv_obj_set_style_bg_color(btnDeny, d ? C_DENY : C_BLACK, 0);
-  lv_obj_set_style_text_color(lblDeny, d ? C_BLACK : C_DENY, 0);
-  lv_obj_set_style_border_width(btnDeny, d ? 5 : 3, 0);
+  for (lv_obj_t *o : { btnDeny, btnAllow }) {
+    if (step1) lv_obj_clear_flag(o, LV_OBJ_FLAG_HIDDEN);
+    else       lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
+  }
+  for (lv_obj_t *o : { btnConfirm, btnCancel }) {
+    if (step1) lv_obj_add_flag(o, LV_OBJ_FLAG_HIDDEN);
+    else       lv_obj_clear_flag(o, LV_OBJ_FLAG_HIDDEN);
+  }
 
-  lv_obj_set_style_bg_color(btnAllow, a ? C_ALLOW : C_BLACK, 0);
-  lv_obj_set_style_text_color(lblAllow, a ? C_BLACK : C_ALLOW, 0);
-  lv_obj_set_style_border_width(btnAllow, a ? 5 : 3, 0);
-
-  if (choice == CH_NONE) {
+  if (step1) {
     lv_label_set_text(lblHint, "TOCA PARA ELEGIR");
     lv_obj_set_style_text_color(lblHint, C_DIM, 0);
-  } else {
-    lv_label_set_text(lblHint, d ? "PULSA BOOT PARA DENEGAR" : "PULSA BOOT PARA PERMITIR");
-    lv_obj_set_style_text_color(lblHint, d ? C_DENY : C_ALLOW, 0);
+    return;
   }
+
+  const lv_color_t col = deny ? C_DENY : C_ALLOW;
+  lv_label_set_text(lblConfirm, deny ? "SI, DENEGAR" : "SI, PERMITIR");
+  lv_obj_set_style_bg_color(btnConfirm, col, 0);
+  lv_obj_set_style_border_color(btnConfirm, col, 0);
+  lv_obj_set_style_text_color(lblConfirm, C_BLACK, 0);
+
+  lv_label_set_text(lblHint, deny ? "confirma para DENEGAR" : "confirma para PERMITIR");
+  lv_obj_set_style_text_color(lblHint, col, 0);
 }
 
 static void pickDeny(lv_event_t *)  { choice = CH_DENY;  paintChoice(); }
 static void pickAllow(lv_event_t *) { choice = CH_ALLOW; paintChoice(); }
+static void cancelChoice(lv_event_t *) { choice = CH_NONE; paintChoice(); }
+static void doConfirm(lv_event_t *)    { uiPermissionConfirm(); }
 
 static lv_obj_t *mkButton(lv_coord_t x, lv_color_t color, lv_event_cb_t cb, lv_obj_t **outLabel,
-                          const char *text) {
+                          const char *text, lv_coord_t w = 222) {
   lv_obj_t *b = lv_obj_create(scr);
   lv_obj_set_style_pad_all(b, 0, 0);
   lv_obj_set_style_radius(b, 0, 0);
   lv_obj_clear_flag(b, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_size(b, 222, 84);
+  lv_obj_set_size(b, w, 84);
   lv_obj_set_pos(b, x, 200);
   lv_obj_set_style_bg_color(b, C_BLACK, 0);
   lv_obj_set_style_bg_opa(b, LV_OPA_COVER, 0);
@@ -167,6 +191,11 @@ void uiPermissionCreate() {
 
   btnDeny  = mkButton(12,  C_DENY,  pickDeny,  &lblDeny,  "DENEGAR");
   btnAllow = mkButton(246, C_ALLOW, pickAllow, &lblAllow, "PERMITIR");
+
+  // Confirmar a la IZQUIERDA (donde estaba DENEGAR) y cancelar a la derecha
+  // (donde estaba PERMITIR): repetir el toque en el mismo sitio jamas aprueba.
+  btnConfirm = mkButton(12,  C_ALLOW, doConfirm,    &lblConfirm, "SI", 300);
+  btnCancel  = mkButton(320, C_DIM,   cancelChoice, &lblCancel,  "CANCELAR", 148);
 
   lblHint = lv_label_create(scr);
   lv_obj_set_style_text_font(lblHint, &lv_font_montserrat_14, 0);

@@ -112,13 +112,18 @@ static void updateLed() {
   const AgentStatus agg = agentsAggregate();
   const uint32_t    now = millis();
 
-  if (agg == ST_WAITING_PERMISSION) {
-    if (now >= nextPulse) {                 // ambar pulsante: es lo unico que te reclama
+  // Dos pulsos distintos, y el ritmo es la mitad del mensaje: el permiso corre
+  // (te esta bloqueando ahora), la sesion parada respira (puede esperar).
+  if (agg == ST_WAITING_PERMISSION || agg == ST_STALLED) {
+    const uint32_t period = (agg == ST_WAITING_PERMISSION) ? 400 : 1400;
+    if (now >= nextPulse) {
       phase = !phase;
-      nextPulse = now + 400;
-      digitalWrite(PIN_LED_R, phase ? LED_ON : LED_OFF);
-      digitalWrite(PIN_LED_G, phase ? LED_ON : LED_OFF);
-      digitalWrite(PIN_LED_B, LED_OFF);
+      nextPulse = now + period;
+      const bool on = phase;
+      // ambar = rojo+verde; cian = verde+azul
+      digitalWrite(PIN_LED_R, (on && agg == ST_WAITING_PERMISSION) ? LED_ON : LED_OFF);
+      digitalWrite(PIN_LED_G, on ? LED_ON : LED_OFF);
+      digitalWrite(PIN_LED_B, (on && agg == ST_STALLED) ? LED_ON : LED_OFF);
     }
     last = agg;
     return;
@@ -130,6 +135,7 @@ static void updateLed() {
   digitalWrite(PIN_LED_R, agg == ST_ERROR   ? LED_ON : LED_OFF);
   digitalWrite(PIN_LED_G, agg == ST_WORKING ? LED_ON : LED_OFF);
   digitalWrite(PIN_LED_B, LED_OFF);
+  nextPulse = 0;
 }
 
 void setup() {

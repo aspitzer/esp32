@@ -11,15 +11,24 @@
 #define AG_DETAIL_LEN  68
 #define AG_ERROR_LEN   24
 
+/**
+ * ST_STALLED no existe en el contrato MQTT: se deduce aqui. Un agente en
+ * reposo mucho rato casi nunca esta "en reposo", esta esperandote a ti, y eso
+ * tiene que verse distinto de una sesion que acaba de terminar su turno.
+ */
 enum AgentStatus : uint8_t {
   ST_IDLE = 0,
   ST_THINKING,
   ST_WORKING,
   ST_WAITING_PERMISSION,
   ST_ERROR,
+  ST_STALLED,
   ST_OFFLINE,
   ST_COUNT,
 };
+
+/** Reposo a partir del cual se considera que la sesion te espera. */
+#define STALLED_AFTER_S (10 * 60)
 
 struct Agent {
   bool         used;
@@ -44,7 +53,10 @@ AgentStatus     agentStatusFromName(const char *s);
 Agent *agentSlot(const char *id);
 void   agentRemove(const char *id);
 
-/** Estado agregado del sistema, para el avatar. Prioridad: permiso > error > trabajo. */
+/** Estado real de un agente, con ST_STALLED ya aplicado. Usar SIEMPRE este. */
+AgentStatus agentEffective(const Agent &a);
+
+/** Estado agregado del sistema, para el avatar. Prioridad: permiso > error > espera. */
 AgentStatus agentsAggregate();
 
 /** Indices de los agentes a pintar, mas vivos primero. Devuelve cuantos. */
