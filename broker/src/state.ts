@@ -129,7 +129,8 @@ function rememberTitle(id: string, path?: string) {
 /** Recorta a lo que cabe en una fila, ya en ASCII. */
 function shortLabel(raw: string): string {
   const l = toAscii(raw);
-  return l.length > 28 ? l.slice(0, 27) + "..." : l;
+  // 30 es lo que entra en la fila con Montserrat 16 (277 px de ancho util).
+  return l.length > 30 ? l.slice(0, 29) + "..." : l;
 }
 
 function labelOf(h: HookBase, id?: string): string {

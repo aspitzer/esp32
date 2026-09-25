@@ -23,6 +23,7 @@
 #define C_BTN    lv_color_hex(0x7A7A7A)
 
 #define ROW_H ((SCREEN_H - TOPBAR_H) / ROWS_VISIBLE)
+#define TIMER_W 62
 
 struct RowUi {
   lv_obj_t *root;
@@ -218,18 +219,24 @@ static void buildRows() {
     lv_obj_set_pos(r.bar, 0, 0);
     lv_obj_set_style_bg_opa(r.bar, LV_OPA_COVER, 0);
 
+    // El nombre manda y necesita sitio: ocupa la fila entera. El cronometro
+    // baja a la segunda linea, donde compite con un texto secundario y no con
+    // el titulo de la sesion. Antes ambos se peleaban por la misma linea y el
+    // nombre se comia el hueco del reloj.
     r.label = mkLabel(r.root, &lv_font_montserrat_16, C_TXT);
-    lv_obj_set_pos(r.label, 15, 9);
-    lv_obj_set_width(r.label, listW - 15 - 62);
     lv_label_set_long_mode(r.label, LV_LABEL_LONG_DOT);
-
-    r.detail = mkLabel(r.root, &lv_font_montserrat_12, C_SOFT);
-    lv_obj_set_pos(r.detail, 15, 33);
-    lv_obj_set_width(r.detail, listW - 15 - 62);
-    lv_label_set_long_mode(r.detail, LV_LABEL_LONG_DOT);
+    lv_obj_set_pos(r.label, 15, 8);
+    lv_obj_set_width(r.label, listW - 15 - 10);
 
     r.timer = mkLabel(r.root, &lv_font_montserrat_16, C_TXT);
-    lv_obj_align(r.timer, LV_ALIGN_RIGHT_MID, -8, 0);
+    lv_obj_set_style_text_align(r.timer, LV_TEXT_ALIGN_RIGHT, 0);
+    lv_obj_set_width(r.timer, TIMER_W);
+    lv_obj_set_pos(r.timer, listW - TIMER_W - 8, 34);
+
+    r.detail = mkLabel(r.root, &lv_font_montserrat_12, C_SOFT);
+    lv_label_set_long_mode(r.detail, LV_LABEL_LONG_DOT);
+    lv_obj_set_pos(r.detail, 15, 38);
+    lv_obj_set_width(r.detail, listW - 15 - TIMER_W - 16);
 
     // Toda la fila es el area tactil: 300x73, muy por encima del minimo de
     // 100x80 que exige el resistivo (el ancho compensa la altura).
@@ -350,8 +357,15 @@ static void buildDetail() {
   dStatus = mkLabel(detailScr, &lv_font_montserrat_16, C_TXT);
   lv_obj_set_pos(dStatus, 14, 44);
 
+  // Una herramienta de MCP puede llamarse
+  // "mcp__plugin_playwright_playwright__browser_take_screenshot": alineada a
+  // la derecha y sin ancho, se extendia por toda la pantalla y pisaba el
+  // estado. Mitad de pantalla y recorte.
   dTool = mkLabel(detailScr, &lv_font_montserrat_14, C_DIM);
-  lv_obj_align(dTool, LV_ALIGN_TOP_RIGHT, -14, 46);
+  lv_label_set_long_mode(dTool, LV_LABEL_LONG_DOT);
+  lv_obj_set_style_text_align(dTool, LV_TEXT_ALIGN_RIGHT, 0);
+  lv_obj_set_width(dTool, 232);
+  lv_obj_set_pos(dTool, SCREEN_W - 232 - 14, 46);
 
   // El comando completo, en varias lineas: es lo que vienes a leer.
   dDetail = mkLabel(detailScr, &lv_font_montserrat_14, C_SOFT);

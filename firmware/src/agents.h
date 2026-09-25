@@ -6,7 +6,7 @@
 
 #define AGENTS_MAX      6    // se pintan los 4 primeros; los otros esperan turno
 #define AG_ID_LEN      20
-#define AG_LABEL_LEN   28
+#define AG_LABEL_LEN   34   // el broker recorta a 30; margen para el NUL y de sobra
 #define AG_TOOL_LEN    18
 #define AG_DETAIL_LEN  68
 #define AG_ERROR_LEN   24
