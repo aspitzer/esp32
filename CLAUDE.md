@@ -104,6 +104,9 @@ oscuras no sabes dónde tocas y abajo hay botones que aprueban comandos.
   `¿`, ni el punto medio `·` que usé de separador durante días. Se comprueba
   leyendo el `unicode_list` del `.c` de la fuente, no suponiendo. El broker
   translitera; el firmware usa `-` y `>`.
+- **El nombre de una sesión es el que le puso el humano**, en
+  `custom-title.json`, no el `aiTitle` automático ni la carpeta. Si alguien se
+  molesta en llamar a una sesión "brain", eso es lo que quiere leer.
 - **Un subagente no es una fila.** Se agrupa bajo su sesión, o ves el mismo
   nombre dos veces (padre en reposo, hijo trabajando) sin forma de relacionarlos.
 - **En un botón, color de borde y color de texto son cosas distintas.** Reusar

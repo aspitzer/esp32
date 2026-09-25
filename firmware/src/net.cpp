@@ -117,7 +117,12 @@ static void onMessage(char *topic, uint8_t *payload, unsigned int len) {
   Agent *a = agentSlot(id);
   if (!a) { Serial.printf("[mqtt] sin slot libre para %s\n", id); return; }
 
-  strlcpy(a->label, doc["label"] | id, AG_LABEL_LEN);
+  {
+    const char *lab = doc["label"] | id;
+    if (strncmp(a->label, lab, AG_LABEL_LEN) != 0)
+      Serial.printf("[lbl] %s -> \"%s\" (%u chars)\n", id, lab, (unsigned)strlen(lab));
+    strlcpy(a->label, lab, AG_LABEL_LEN);
+  }
   a->status = agentStatusFromName(doc["status"] | "idle");
   strlcpy(a->tool,      doc["tool"]      | "", AG_TOOL_LEN);
   strlcpy(a->detail,    doc["detail"]    | "", AG_DETAIL_LEN);

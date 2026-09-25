@@ -80,14 +80,34 @@ const NOISE = new Set([
  * dos segmentos caben en el ancho de la fila (24 chars).
  */
 /**
- * Titulo de la sesion que Claude Code genera solo y guarda en el transcript
- * como "aiTitle". Es muchisimo mas util que el nombre de la carpeta: dos
- * sesiones en el mismo repo son indistinguibles por carpeta, y "civitatis-work"
- * dice menos que "Revenue tracking en business case".
+ * De donde sale el nombre de una fila, por orden de preferencia:
+ *
+ *   1. El que le has puesto tu con /rename o --name. Claude Code lo guarda en
+ *      <transcript sin .jsonl>/custom-title.json. Gana siempre: si te has
+ *      molestado en llamarla "brain", eso es lo que quieres leer.
+ *   2. El aiTitle del transcript, que Claude Code genera solo con el tema.
+ *   3. El nombre de la carpeta, que no distingue dos sesiones en el mismo repo.
+ *
+ * El fichero del nombre propio es diminuto, asi que se relee cada 30 s. El
+ * transcript puede pesar megas: ese solo cada 5 minutos, y solo si no hay
+ * nombre propio.
  */
 const titles = new Map<string, string>();
 const titleRead = new Map<string, number>();
-const TITLE_REFRESH_MS = 5 * 60 * 1000;
+const aiRead = new Map<string, number>();
+const TITLE_REFRESH_MS = 30 * 1000;
+const AI_REFRESH_MS = 5 * 60 * 1000;
+
+async function readCustomTitle(transcript: string): Promise<string | null> {
+  try {
+    const dir = transcript.replace(/\.jsonl$/, "");
+    const raw = await Bun.file(`${dir}/custom-title.json`).text();
+    const t = (JSON.parse(raw) as { customTitle?: string }).customTitle;
+    return t && t.trim() ? t.trim() : null;
+  } catch {
+    return null;                 // la sesion no tiene nombre propio: normal
+  }
+}
 
 async function readTitle(path: string): Promise<string | null> {
   try {
@@ -114,16 +134,24 @@ async function readTitle(path: string): Promise<string | null> {
  */
 function rememberTitle(id: string, path?: string) {
   if (!path) return;
-  const last = titleRead.get(id) ?? 0;
-  if (Date.now() - last < TITLE_REFRESH_MS) return;
-  titleRead.set(id, Date.now());
+  const ahora = Date.now();
+  if (ahora - (titleRead.get(id) ?? 0) < TITLE_REFRESH_MS) return;
+  titleRead.set(id, ahora);
 
-  void readTitle(path).then((t) => {
-    if (t && titles.get(id) !== t) {
+  void (async () => {
+    let t = await readCustomTitle(path);
+
+    if (!t && ahora - (aiRead.get(id) ?? 0) >= AI_REFRESH_MS) {
+      aiRead.set(id, ahora);
+      t = await readTitle(path);
+    }
+    if (!t) return;
+
+    if (titles.get(id) !== t) {
       titles.set(id, t);
       if (own.has(id)) republish(id);      // repinta con el nombre bueno
     }
-  });
+  })();
 }
 
 /** Recorta a lo que cabe en una fila, ya en ASCII. */

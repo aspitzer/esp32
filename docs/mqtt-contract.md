@@ -47,8 +47,15 @@ ni ñ, ni `¿`, ni el punto medio: verificado leyendo el cmap del `.c` de la
 fuente. El broker translitera antes de publicar, así la placa no tiene que
 saber nada de esto.
 
-`label` sale del `aiTitle` del transcript de Claude Code — el título real de
-la sesión — y cae al nombre de la carpeta si aún no se ha leído.
+`label` se resuelve por este orden:
+
+1. **El nombre que le hayas puesto tú** con `/rename` o `--name`. Claude Code lo
+   guarda en `<transcript sin .jsonl>/custom-title.json`. Gana siempre.
+2. El `aiTitle` del transcript, que Claude Code genera solo con el tema.
+3. El nombre de la carpeta, que no distingue dos sesiones en el mismo repo.
+
+El fichero del nombre propio es diminuto y se relee cada 30 s; el transcript
+puede pesar megas, así que solo cada 5 minutos y solo si no hay nombre propio.
 
 Retained es clave: la placa reinicia y repinta al instante sin pedir nada.
 Al terminar una sesión el broker publica `status: "offline"`, también retained.
