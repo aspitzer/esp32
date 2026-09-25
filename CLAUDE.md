@@ -26,7 +26,9 @@ muestra el estado de N agentes de Claude Code y permite aprobar/denegar sus perm
    esquemático antes de usar audio e I2C a la vez.
 7. **Panel TN**: ángulos de visión pobres. Contraste alto, nada de grises sutiles.
 8. **Orientación apaisada (480x320).** Avatar a la izquierda (~180 px), lista de
-   agentes a la derecha.
+   agentes a la derecha, con scroll y **layout dinámico**: quien trabaja ocupa
+   el ancho completo con detalle y cronómetro; quien está en reposo se queda en
+   una ficha pequeña, sin cronómetro, compartiendo línea con otra.
 
 ## Presupuesto de memoria
 
@@ -115,6 +117,10 @@ oscuras no sabes dónde tocas y abajo hay botones que aprueban comandos.
   guarda en `raw` y se ve al tocar la fila.
 - **Un subagente no es una fila.** Se agrupa bajo su sesión, o ves el mismo
   nombre dos veces (padre en reposo, hijo trabajando) sin forma de relacionarlos.
+- **El tamaño del pool de LVGL mueve el mayor bloque contiguo del heap**, y no
+  de forma lineal: 49152 lo hunde a 71 KB, 45056 lo deja en 103 KB y 40960 en
+  107 KB pero con el pool al 85%. Cuatro kilobytes de `.bss` cruzan un límite
+  de la DRAM segmentada del ESP32. Medir siempre las dos cifras a la vez.
 - **En un botón, color de borde y color de texto son cosas distintas.** Reusar
   uno para ambos dejó `VOLVER` en gris #2E2E2E sobre panel #101010: ilegible.
   Y en TN un borde a #2E2E2E tampoco se distingue del fondo; los botones

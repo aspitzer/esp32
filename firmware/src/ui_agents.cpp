@@ -25,18 +25,28 @@
 #define ROW_H ((SCREEN_H - TOPBAR_H) / ROWS_VISIBLE)
 #define TIMER_W 62
 
-struct RowUi {
+/**
+ * Layout dinamico. Una sesion trabajando necesita ancho: nombre, que esta
+ * haciendo y cuanto lleva. Una parada no necesita nada de eso, solo estar
+ * presente, asi que se queda en una ficha pequeña y comparte linea con otra.
+ * Asi caben siete sesiones sin que las importantes pierdan sitio.
+ */
+struct Card {
   lv_obj_t *root;
-  lv_obj_t *bar;
   lv_obj_t *label;
   lv_obj_t *detail;
   lv_obj_t *timer;
+  char      id[AG_ID_LEN];   // copia: el orden cambia entre pintar y tocar
 };
 
-static lv_obj_t *scr;
+#define MAX_CARDS   8        // lo que cabe sin ahogar el pool de LVGL
+#define CARD_FULL_H 70
+#define CARD_MINI_H 46
+
+static lv_obj_t *scr, *list;
 static lv_obj_t *lblMqtt, *lblRssi, *lblClock;
 static lv_obj_t *lblMood, *lblCount;
-static RowUi     rows[ROWS_VISIBLE];
+static Card      cards[MAX_CARDS];
 
 
 // --- pantalla de detalle -----------------------------------------------------
@@ -173,12 +183,11 @@ static void refreshDetail();
 
 static void rowClicked(lv_event_t *e) {
   const uint8_t slot = (uint8_t)(uintptr_t)lv_event_get_user_data(e);
+  if (slot >= MAX_CARDS || !cards[slot].id[0]) return;
 
-  uint8_t idx[AGENTS_MAX];
-  const uint8_t n = agentsVisible(idx, ROWS_VISIBLE);
-  if (slot >= n) return;
-
-  strlcpy(detailId, agents[idx[slot]].id, AG_ID_LEN);
+  // Se guarda el id en la tarjeta: entre pintar y tocar, el orden puede haber
+  // cambiado y con un indice acabarias abriendo otra sesion.
+  strlcpy(detailId, cards[slot].id, AG_ID_LEN);
   refreshDetail();
   lv_screen_load(detailScr);
   Serial.printf("[ui  ] detalle de %s\n", detailId);
@@ -197,54 +206,51 @@ void uiAgentsShowList() {
   lv_screen_load(scr);
 }
 
-static void buildRows() {
+/**
+ * Contenedor con scroll. El tactil resistivo es de un punto y arrastrar va
+ * justo, asi que el orden por interes sigue siendo lo que importa: lo urgente
+ * esta arriba SIEMPRE y el scroll solo hace falta para la cola aburrida.
+ */
+static void buildList() {
   const lv_coord_t listW = SCREEN_W - AVATAR_W;
 
-  for (uint8_t i = 0; i < ROWS_VISIBLE; i++) {
-    RowUi &r = rows[i];
+  list = lv_obj_create(scr);
+  noPad(list);
+  lv_obj_set_size(list, listW, SCREEN_H - TOPBAR_H);
+  lv_obj_set_pos(list, AVATAR_W, TOPBAR_H);
+  lv_obj_add_flag(list, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scroll_dir(list, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_AUTO);
+  lv_obj_set_style_pad_all(list, 4, 0);
+  lv_obj_set_style_pad_row(list, 5, 0);
+  lv_obj_set_style_pad_column(list, 5, 0);
+  lv_obj_set_flex_flow(list, LV_FLEX_FLOW_ROW_WRAP);
+  lv_obj_set_flex_align(list, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START);
 
-    r.root = lv_obj_create(scr);
-    noPad(r.root);
-    lv_obj_set_size(r.root, listW, ROW_H);
-    lv_obj_set_pos(r.root, AVATAR_W, TOPBAR_H + i * ROW_H);
-    if (i < ROWS_VISIBLE - 1) {
-      lv_obj_set_style_border_side(r.root, LV_BORDER_SIDE_BOTTOM, 0);
-      lv_obj_set_style_border_color(r.root, C_LINE, 0);
-      lv_obj_set_style_border_width(r.root, 1, 0);
-    }
+  for (uint8_t i = 0; i < MAX_CARDS; i++) {
+    Card &c = cards[i];
+    c.id[0] = '\0';
 
-    r.bar = lv_obj_create(r.root);
-    noPad(r.bar);
-    lv_obj_set_size(r.bar, 6, ROW_H);
-    lv_obj_set_pos(r.bar, 0, 0);
-    lv_obj_set_style_bg_opa(r.bar, LV_OPA_COVER, 0);
+    c.root = lv_obj_create(list);
+    noPad(c.root);
+    lv_obj_set_style_bg_color(c.root, C_PANEL, 0);
+    lv_obj_set_style_bg_opa(c.root, LV_OPA_COVER, 0);
+    lv_obj_add_flag(c.root, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(c.root, rowClicked, LV_EVENT_CLICKED, (void *)(uintptr_t)i);
 
-    // El nombre manda y necesita sitio: ocupa la fila entera. El cronometro
-    // baja a la segunda linea, donde compite con un texto secundario y no con
-    // el titulo de la sesion. Antes ambos se peleaban por la misma linea y el
-    // nombre se comia el hueco del reloj.
-    // Tres lineas por fila: nombre arriba pegado, y debajo dos de detalle que
-    // aprovechan el hueco que antes quedaba muerto. El cronometro vive en la
-    // columna derecha, fuera del ancho del texto, asi que nunca se solapan.
-    r.label = mkLabel(r.root, &lv_font_montserrat_16, C_TXT);
-    lv_label_set_long_mode(r.label, LV_LABEL_LONG_DOT);
-    lv_obj_set_pos(r.label, 15, 4);
-    lv_obj_set_width(r.label, listW - 15 - 10);
+    // La barra de estado es el borde izquierdo del propio objeto, no un hijo:
+    // ocho tarjetas x un objeto menos es pool que no se gasta.
+    lv_obj_set_style_border_side(c.root, LV_BORDER_SIDE_LEFT, 0);
+    lv_obj_set_style_border_width(c.root, 6, 0);
 
-    r.timer = mkLabel(r.root, &lv_font_montserrat_16, C_TXT);
-    lv_obj_set_style_text_align(r.timer, LV_TEXT_ALIGN_RIGHT, 0);
-    lv_obj_set_width(r.timer, TIMER_W);
-    lv_obj_set_pos(r.timer, listW - TIMER_W - 8, 28);
+    c.label = mkLabel(c.root, &lv_font_montserrat_16, C_TXT);
+    lv_label_set_long_mode(c.label, LV_LABEL_LONG_DOT);
 
-    r.detail = mkLabel(r.root, &lv_font_montserrat_12, C_SOFT);
-    lv_label_set_long_mode(r.detail, LV_LABEL_LONG_WRAP);
-    lv_obj_set_pos(r.detail, 15, 27);
-    lv_obj_set_size(r.detail, listW - 15 - TIMER_W - 16, 40);
+    c.detail = mkLabel(c.root, &lv_font_montserrat_12, C_SOFT);
+    lv_label_set_long_mode(c.detail, LV_LABEL_LONG_WRAP);
 
-    // Toda la fila es el area tactil: 300x73, muy por encima del minimo de
-    // 100x80 que exige el resistivo (el ancho compensa la altura).
-    lv_obj_add_flag(r.root, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(r.root, rowClicked, LV_EVENT_CLICKED, (void *)(uintptr_t)i);
+    c.timer = mkLabel(c.root, &lv_font_montserrat_16, C_TXT);
+    lv_obj_set_style_text_align(c.timer, LV_TEXT_ALIGN_RIGHT, 0);
   }
 }
 
@@ -519,7 +525,7 @@ void uiAgentsCreate() {
 
   buildTopbar();
   buildAvatar();
-  buildRows();
+  buildList();
   buildDetail();
   buildActions();
 
@@ -595,25 +601,60 @@ static void refreshAvatar() {
   setTextIfChanged(lblCount, buf);
 }
 
-static void refreshRows() {
-  uint8_t idx[AGENTS_MAX];
-  const uint8_t n = agentsVisible(idx, ROWS_VISIBLE);
+static void refreshCards() {
+  const lv_coord_t listW = SCREEN_W - AVATAR_W;
+  const lv_coord_t inner = listW - 8;              // menos el padding del contenedor
+  const lv_coord_t miniW = (inner - 5) / 2;        // dos por linea, con su hueco
+  const lv_coord_t fullW = inner;
 
-  for (uint8_t i = 0; i < ROWS_VISIBLE; i++) {
-    RowUi &r = rows[i];
+  uint8_t idx[AGENTS_MAX];
+  const uint8_t n = agentsVisible(idx, MAX_CARDS);
+
+  for (uint8_t i = 0; i < MAX_CARDS; i++) {
+    Card &c = cards[i];
 
     if (i >= n) {
-      lv_obj_add_flag(r.root, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(c.root, LV_OBJ_FLAG_HIDDEN);
+      c.id[0] = '\0';
       continue;
     }
-    lv_obj_clear_flag(r.root, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(c.root, LV_OBJ_FLAG_HIDDEN);
 
     const Agent      &a   = agents[idx[i]];
     const AgentStatus st  = agentEffective(a);
     const lv_color_t  col = lv_color_hex(agentColor(st));
+    strlcpy(c.id, a.id, AG_ID_LEN);
 
-    lv_obj_set_style_bg_color(r.bar, col, 0);
-    setTextIfChanged(r.label, a.label);
+    // Una sesion parada no necesita ni detalle ni cronometro: solo estar.
+    const bool mini = (st == ST_IDLE || st == ST_OFFLINE);
+
+    lv_obj_set_size(c.root, mini ? miniW : fullW, mini ? CARD_MINI_H : CARD_FULL_H);
+    lv_obj_set_style_border_color(c.root, col, 0);
+
+    setTextIfChanged(c.label, a.label);
+
+    if (mini) {
+      lv_obj_add_flag(c.detail, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(c.timer, LV_OBJ_FLAG_HIDDEN);
+      lv_obj_set_style_text_font(c.label, &lv_font_montserrat_14, 0);
+      lv_obj_set_width(c.label, miniW - 6 - 14);
+      lv_obj_set_pos(c.label, 8, 12);
+      setColorIfChanged(c.label, C_SOFT);
+      continue;
+    }
+
+    lv_obj_clear_flag(c.detail, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(c.timer, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_style_text_font(c.label, &lv_font_montserrat_16, 0);
+    setColorIfChanged(c.label, C_TXT);
+    lv_obj_set_width(c.label, fullW - 6 - 16);
+    lv_obj_set_pos(c.label, 8, 4);
+
+    lv_obj_set_width(c.timer, TIMER_W);
+    lv_obj_set_pos(c.timer, fullW - TIMER_W - 14, 26);
+
+    lv_obj_set_size(c.detail, fullW - 8 - TIMER_W - 20, 38);
+    lv_obj_set_pos(c.detail, 8, 25);
 
     static char line[AG_TOOL_LEN + AG_DETAIL_LEN + 8];
     switch (st) {
@@ -623,36 +664,27 @@ static void refreshRows() {
       case ST_ERROR:
         snprintf(line, sizeof(line), "ERROR - %s", a.lastError[0] ? a.lastError : "?");
         break;
-      case ST_OFFLINE:
-        snprintf(line, sizeof(line), "SESION TERMINADA");
-        break;
-      case ST_IDLE:
-        snprintf(line, sizeof(line), "EN REPOSO");
-        break;
       case ST_STALLED:
-        snprintf(line, sizeof(line), "TE ESPERA");
+        snprintf(line, sizeof(line), "TE ESPERA%s%s", a.detail[0] ? " - " : "", a.detail);
         break;
       default:
         // Si quien trabaja es un subagente, decirlo: la sesion padre puede
-        // estar parada y aun asi la fila tiene que contar la verdad.
+        // estar parada y aun asi la tarjeta tiene que contar la verdad.
         if (a.subType[0] && a.detail[0])
           snprintf(line, sizeof(line), ">%s - %s", a.subType, a.detail);
-        else if (a.subType[0])
-          snprintf(line, sizeof(line), ">%s - %s", a.subType, a.tool);
         else if (a.detail[0])
-          snprintf(line, sizeof(line), "%s - %s", a.tool, a.detail);
+          snprintf(line, sizeof(line), "%s", a.detail);
         else
           snprintf(line, sizeof(line), "%s", a.tool);
         break;
     }
-    setTextIfChanged(r.detail, line);
-    setColorIfChanged(r.detail, st == ST_WORKING ? C_SOFT : col);
+    setTextIfChanged(c.detail, line);
+    setColorIfChanged(c.detail, st == ST_WORKING ? C_SOFT : col);
 
     static char t[10];
     fmtElapsed(t, sizeof(t), a.since);
-    setTextIfChanged(r.timer, t);
-    setColorIfChanged(
-        r.timer,
+    setTextIfChanged(c.timer, t);
+    setColorIfChanged(c.timer,
         (st == ST_ERROR || st == ST_WAITING_PERMISSION || st == ST_STALLED) ? col : C_TXT);
   }
 }
@@ -665,7 +697,7 @@ void uiAgentsRefresh() {
   }
   refreshTopbar();
   refreshAvatar();
-  refreshRows();
+  refreshCards();
 }
 
 void uiAgentsTickSlow() {
