@@ -43,6 +43,7 @@ struct Agent {
   char         lastError[AG_ERROR_LEN];
   // Subagentes agrupados bajo esta sesion. El broker ya funde su estado con
   // el del padre; esto es solo para poder decir quien esta trabajando.
+  bool         tmux;                    // alcanzable por tmux: el boton escribe de verdad
   uint8_t      subN;
   char         subType[AG_SUBTYPE_LEN];
   uint32_t     rxMillis;              // cuando llego, para ordenar

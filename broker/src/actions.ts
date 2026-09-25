@@ -35,7 +35,7 @@ const DRY_RUN = process.env.ACTIONS_DRY_RUN === "1";
 const TMUX   = process.env.TMUX_BIN   ?? "tmux";
 const CLAUDE = process.env.CLAUDE_BIN ?? "claude";
 
-export type ActionId = "continue" | "tests" | "status" | "interrupt";
+export type ActionId = "go" | "continue" | "tests" | "status" | "interrupt";
 
 interface ActionDef {
   label: string;
@@ -44,6 +44,9 @@ interface ActionDef {
 }
 
 const CATALOG: Record<ActionId, ActionDef> = {
+  // El caso mas comun de todos: la sesion ha terminado de explicar algo y
+  // solo espera un "tira". Va primero y con el texto mas corto posible.
+  go:        { label: "ADELANTE", prompt: "adelante" },
   continue:  { label: "CONTINUA", prompt: "continúa" },
   tests:     { label: "TESTS",    prompt: "lanza los tests y arregla lo que falle" },
   status:    { label: "ESTADO",   prompt: "resume en tres lineas donde estas y que falta" },
@@ -95,6 +98,24 @@ async function run(cmd: string[], opts: { cwd?: string } = {}) {
  * cambiaran entre medias, las listas no cuadran en longitud y se descartan:
  * es preferible no encontrar panel a escribir en el equivocado.
  */
+/**
+ * Cache de paneles. Saber si una sesion es alcanzable por tmux hace falta en
+ * CADA publicacion de estado, y lanzar tres procesos por evento seria absurdo.
+ * Se refresca sola cada diez segundos.
+ */
+let paneCache: Pane[] = [];
+
+export async function refreshPanes() {
+  paneCache = await listPanes();
+}
+
+/** Sincrono a proposito: lo consulta el camino de publicacion. */
+export function hasPaneFor(cwdRaw: string | undefined): boolean {
+  if (!cwdRaw) return false;
+  const cwd = realOrSame(cwdRaw);
+  return paneCache.some((p) => realOrSame(p.path) === cwd);
+}
+
 async function listPanes(): Promise<Pane[]> {
   const campos = ["#{session_name}:#{window_index}.#{pane_index}",
                   "#{pane_current_path}",

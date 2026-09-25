@@ -55,7 +55,7 @@ static char      detailId[AG_ID_LEN] = {0};
 // de la de los botones de accion: repetir un toque nunca ejecuta.
 #define ACTION_COUNT 4
 
-static lv_obj_t   *actionsScr, *lblActAgent, *lblActResult;
+static lv_obj_t   *actionsScr, *lblActAgent, *lblActResult, *lblActWarn;
 static lv_obj_t   *btnActBack, *btnActOk, *btnActCancel;
 static lv_obj_t   *actBtn[ACTION_COUNT];
 static lv_color_t  actColor[ACTION_COUNT];
@@ -454,18 +454,26 @@ static void buildActions() {
   lv_obj_clear_flag(actionsScr, LV_OBJ_FLAG_SCROLLABLE);
 
   lblActAgent = mkLabel(actionsScr, &lv_font_montserrat_16, C_TXT);
-  lv_obj_set_pos(lblActAgent, 14, 6);
+  lv_obj_set_pos(lblActAgent, 14, 4);
+
+  lblActWarn = mkLabel(actionsScr, &lv_font_montserrat_12, lv_color_hex(0xFFB020));
+  lv_obj_set_width(lblActWarn, SCREEN_W - 28);
+  lv_label_set_long_mode(lblActWarn, LV_LABEL_LONG_DOT);
+  lv_obj_set_pos(lblActWarn, 14, 24);
 
   // 2x2 de 222x88: por encima del minimo de 100x80 del tactil resistivo.
   static const lv_coord_t X[ACTION_COUNT] = { 14, 244, 14, 244 };
-  static const lv_coord_t Y[ACTION_COUNT] = { 34, 34, 130, 130 };
-  actId[0]    = "continue"; actLabel[0] = "CONTINUA"; actColor[0] = lv_color_hex(0x24D65F);
-  actId[1]    = "tests";    actLabel[1] = "TESTS";    actColor[1] = lv_color_hex(0x4DA6FF);
-  actId[2]    = "status";   actLabel[2] = "ESTADO";   actColor[2] = lv_color_hex(0xB07CFF);
+  static const lv_coord_t Y[ACTION_COUNT] = { 42, 42, 136, 136 };
+  // ADELANTE primero: el caso mas comun con diferencia es una sesion que ya
+  // te ha explicado algo y solo espera un "tira". ESTADO se cae de la lista,
+  // que la pantalla ya te dice el estado sin preguntar.
+  actId[0]    = "go";       actLabel[0] = "ADELANTE"; actColor[0] = lv_color_hex(0x24D65F);
+  actId[1]    = "continue"; actLabel[1] = "CONTINUA"; actColor[1] = lv_color_hex(0x4DA6FF);
+  actId[2]    = "tests";    actLabel[2] = "TESTS";    actColor[2] = lv_color_hex(0xB07CFF);
   actId[3]    = "interrupt";actLabel[3] = "PARAR";    actColor[3] = lv_color_hex(0xFF4B4B);
 
   for (uint8_t i = 0; i < ACTION_COUNT; i++) {
-    actBtn[i] = mkBigButton(actionsScr, X[i], Y[i], 222, 88, actLabel[i],
+    actBtn[i] = mkBigButton(actionsScr, X[i], Y[i], 222, 86, actLabel[i],
                             actColor[i], actColor[i], actionPicked, (void *)(intptr_t)i);
   }
 
@@ -488,6 +496,13 @@ static void buildActions() {
 static void showActions() {
   const Agent *a = agentById(detailId);
   setTextIfChanged(lblActAgent, a ? a->label : detailId);
+
+  // Decirlo ANTES de pulsar, no despues: sin tmux no se escribe en la
+  // conversacion viva, se abre una sesion nueva que no sabe de que va.
+  const bool alcanzable = a && a->tmux;
+  setTextIfChanged(lblActWarn, alcanzable ? "" : "sin tmux: abrira una sesion NUEVA, sin contexto");
+  setColorIfChanged(lblActWarn, lv_color_hex(0xFFB020));
+
   netClearActionResult();
   actChosen  = -1;
   actVisible = true;

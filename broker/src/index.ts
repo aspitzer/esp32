@@ -8,7 +8,7 @@
 import { connect, disconnect, deviceList, purgeStaleAgents, onActionRequest, publishActionResult } from "./mqtt.ts";
 import * as state from "./state.ts";
 import { ask, pendingCount, minRisk } from "./permissions.ts";
-import { actionCatalog, isActionId, runAction } from "./actions.ts";
+import { actionCatalog, isActionId, runAction, refreshPanes } from "./actions.ts";
 import { summarize } from "./state.ts";
 import type { HookBase, HookPreTool, HookStopFailure } from "./types.ts";
 
@@ -207,6 +207,11 @@ onActionRequest(async (req) => {
  */
 process.on("unhandledRejection", (r) => console.error("[bus ] promesa sin capturar:", r));
 process.on("uncaughtException",  (e) => console.error("[bus ] excepcion sin capturar:", e));
+
+// Los paneles de tmux se refrescan solos: hace falta saber si una sesion es
+// alcanzable en cada publicacion de estado.
+await refreshPanes();
+setInterval(() => void refreshPanes(), 10_000).unref?.();
 
 await connect();
 const purged = await purgeStaleAgents();

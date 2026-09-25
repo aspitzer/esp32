@@ -1,6 +1,7 @@
 import { basename } from "node:path";
 import type { AgentState, AgentStatus, HookBase, HookPreTool, HookStopFailure } from "./types.ts";
 import { publishAgentState, clearAgentState } from "./mqtt.ts";
+import { hasPaneFor } from "./actions.ts";
 
 /** Cuanto se mantiene el retained de un agente muerto antes de borrarlo. */
 const OFFLINE_TTL_MS = 10 * 60 * 1000;
@@ -382,6 +383,11 @@ function republish(sid: string): AgentState {
     }
   }
   merged.subN = Math.max(merged.subN ?? 0, esperando);
+
+  // Si la sesion corre en un panel de tmux, un boton de la placa escribe en
+  // la conversacion viva. Si no, lo unico posible es abrir una sesion nueva,
+  // y eso hay que decirlo ANTES de pulsar, no despues.
+  merged.tmux = hasPaneFor(cwds.get(sid));
 
   const prev = agents.get(sid);
   // 'since' solo se reinicia cuando cambia el estado: es el cronometro de la UI.

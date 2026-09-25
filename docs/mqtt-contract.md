@@ -35,6 +35,7 @@ Broker MQTT: Mosquitto local, sin TLS, en la LAN. QoS 1 salvo donde se indique.
 | `raw` | string \| null | el comando literal, para la pantalla de detalle |
 | `since` | number | epoch en segundos del último cambio de `status` |
 | `lastError` | string \| null | p. ej. `rate_limit`, `overloaded` |
+| `tmux` | boolean | la sesión es alcanzable por `tmux send-keys` |
 | `subN` | number | subagentes vivos bajo esta sesión |
 | `subType` | string \| null | tipo del subagente cuyo estado manda ahora |
 
@@ -107,7 +108,7 @@ placa interrumpe por cada `Edit`, dejas de mirarla, y el proyecto ha fracasado.
 { "agentId": "sherpa-01", "action": "continue", "source": "device" }
 ```
 
-`action` ∈ `continue | tests | status | interrupt`
+`action` ∈ `go | continue | tests | status | interrupt`
 
 La placa **solo publica aquí tras confirmar con BOOT**. Tocar un botón en la
 pantalla de acciones únicamente selecciona: sin pulsación física no sale nada
@@ -118,6 +119,11 @@ al bus.
 shell. Un `action` desconocido se descarta en el broker. Un dispositivo
 comprometido en la LAN solo puede disparar una de esas cuatro frases, no
 comandos arbitrarios.
+
+`tmux` viaja en el estado para que la placa pueda avisar **antes** de pulsar:
+sin panel, la acción no escribe en la conversación viva, abre una sesión nueva
+sin contexto. El broker cachea los paneles y los refresca cada 10 s, porque
+esto se consulta en cada publicación de estado.
 
 El broker elige el camino por agente:
 

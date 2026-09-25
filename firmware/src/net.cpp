@@ -130,6 +130,7 @@ static void onMessage(char *topic, uint8_t *payload, unsigned int len) {
   strlcpy(a->lastError, doc["lastError"] | "", AG_ERROR_LEN);
   strlcpy(a->subType,   doc["subType"]   | "", AG_SUBTYPE_LEN);
   a->subN     = doc["subN"] | 0;
+  a->tmux     = doc["tmux"] | false;
   a->since    = doc["since"] | 0;
   a->rxMillis = millis();
 
