@@ -27,6 +27,7 @@ const HOOK_PATHS = [
   "/hook/stop",
   "/hook/stop-failure",
   "/hook/session-end",
+  "/hook/user-prompt",
   "/hook/subagent-start",
   "/hook/subagent-stop",
   "/hook/permission",
@@ -112,6 +113,11 @@ const server = Bun.serve({
       case "/hook/stop-failure": {
         const h = await body<HookStopFailure>(req);
         if (h) log(state.onStopFailure(h));
+        return ok();
+      }
+      case "/hook/user-prompt": {
+        const h = await body<HookBase & { prompt?: string }>(req);
+        if (h) log(state.onUserPrompt(h));
         return ok();
       }
       case "/hook/subagent-start": {
@@ -216,6 +222,11 @@ setInterval(() => void refreshPanes(), 10_000).unref?.();
 await connect();
 const purged = await purgeStaleAgents();
 if (purged) console.log(`[bus ] ${purged} agente(s) fantasma limpiados de un arranque anterior`);
+
+// Despues de purgar: se repuebla desde los transcripts para que las sesiones
+// paradas no desaparezcan solo porque el broker se reinicio.
+const seeded = await state.seedFromDisk();
+console.log(`[bus ] ${seeded} sesion(es) recuperadas de los transcripts`);
 
 console.log(`[http] hooks en http://${HOST}:${PORT}  (token ${TOKEN ? "exigido" : "NO configurado"})`);
 console.log(`[http] permisos ${PERMISSIONS_ENABLED ? "ACTIVADOS" : "desactivados (fase 1)"}`);

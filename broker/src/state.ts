@@ -467,6 +467,21 @@ export function onPreTool(h: HookPreTool) {
   });
 }
 
+/**
+ * Le has mandado algo: esta pensando, aunque todavia no haya tocado ninguna
+ * herramienta. Sin esto habia un hueco —a veces largo— entre que escribes y
+ * que empieza a trabajar, y la pantalla decia "en reposo" mintiendo.
+ */
+export function onUserPrompt(h: HookBase & { prompt?: string }) {
+  const p = (h.prompt ?? "").replace(/\s+/g, " ").trim();
+  return upsert(h, {
+    status: "thinking",
+    tool: null,
+    detail: p ? truncate(`Le has pedido: ${p}`, 46) : "Pensando",
+    raw: p ? truncate(p, 64) : null,
+  });
+}
+
 export function onStop(h: HookBase) {
   return upsert(h, { status: "idle", tool: null, detail: null });
 }
@@ -509,6 +524,65 @@ export function clearWaitingPermission(agentId: string) {
   if (!prev || prev.status !== "waiting_permission") return;
   own.set(agentId, { ...prev, status: "working" });
   republish(agentId);
+}
+
+/**
+ * Reconstruye las sesiones leyendo los transcripts de Claude Code.
+ *
+ * Sin esto, un reinicio del broker borraba el estado y una sesion solo
+ * reaparecia cuando emitia un evento. Las que estan paradas esperandote no
+ * emiten nada, asi que desaparecian de la pantalla justo las que mas te
+ * interesa ver. Es el caso que destapo "tengo una sesion de brain que no sale".
+ *
+ * Se toma la fecha del fichero como ultima actividad, asi que una sesion
+ * aparcada hace media hora entra directamente como "te espera", que es la
+ * verdad.
+ */
+export async function seedFromDisk(maxAgeH = 12): Promise<number> {
+  const home = process.env.HOME ?? "";
+  const glob = new Bun.Glob("projects/*/*.jsonl");
+  const corte = Date.now() - maxAgeH * 3600_000;
+  let n = 0;
+
+  for await (const rel of glob.scan({ cwd: `${home}/.claude`, absolute: true })) {
+    try {
+      const f = Bun.file(rel);
+      const mtime = (await f.stat()).mtimeMs;
+      if (mtime < corte) continue;
+
+      const base = rel.replace(/\.jsonl$/, "");
+      const id = (base.split("/").pop() ?? "").replace(/-/g, "").slice(0, 8);
+      if (!id || own.has(id)) continue;
+
+      // El cwd esta en las primeras lineas; no hace falta leer el fichero entero.
+      let cwd: string | undefined;
+      const cabeza = await f.slice(0, 64 * 1024).text();
+      for (const line of cabeza.split("\n")) {
+        if (!line.includes('"cwd"')) continue;
+        try { cwd = (JSON.parse(line) as { cwd?: string }).cwd; } catch { /* a medias */ }
+        if (cwd) break;
+      }
+
+      const titulo = await readCustomTitle(rel);
+      if (titulo) titles.set(id, titulo);
+      if (cwd) cwds.set(id, cwd);
+
+      const carpeta = cwd ? (cwd.split("/").filter(Boolean).at(-1) ?? id) : id;
+      own.set(id, {
+        id,
+        label: shortLabel(titulo ?? carpeta),
+        status: "idle",
+        tool: null,
+        detail: null,
+        raw: null,
+        since: Math.floor(mtime / 1000),
+        lastError: null,
+      });
+      republish(id);
+      n++;
+    } catch { /* un transcript ilegible no puede tumbar el arranque */ }
+  }
+  return n;
 }
 
 export function agentIdFor(h: HookBase): string { return agentIdOf(h); }

@@ -4,7 +4,11 @@
 
 #include <Arduino.h>
 
-#define AGENTS_MAX      6    // se pintan los 4 primeros; los otros esperan turno
+// Se pintan los 4 primeros por interes, pero hay que GUARDARLOS todos: al
+// reconstruir el estado desde los transcripts aparecen de golpe todas las
+// sesiones del dia, y con el limite en 6 se descartaban mensajes en silencio.
+// 12 x ~260 B = 3 KB, nada al lado de los 154 KB libres.
+#define AGENTS_MAX     12
 #define AG_ID_LEN      20
 #define AG_LABEL_LEN   34   // el broker recorta a 30; margen para el NUL y de sobra
 #define AG_TOOL_LEN    18

@@ -121,6 +121,23 @@
           }
         ]
       }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "http",
+            "url": "http://127.0.0.1:8787/hook/user-prompt",
+            "timeout": 5,
+            "headers": {
+              "X-Bus-Token": "$AGENT_BUS_TOKEN"
+            },
+            "allowedEnvVars": [
+              "AGENT_BUS_TOKEN"
+            ]
+          }
+        ]
+      }
     ]
   }
 }

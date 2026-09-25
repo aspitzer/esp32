@@ -588,8 +588,10 @@ static void refreshAvatar() {
   }
 
   static char buf[28];
-  if (total == 0) snprintf(buf, sizeof(buf), "esperando eventos");
-  else            snprintf(buf, sizeof(buf), "%u activos - %u en total", busy, total);
+  if (total == 0)              snprintf(buf, sizeof(buf), "esperando eventos");
+  else if (total > ROWS_VISIBLE) snprintf(buf, sizeof(buf), "%u activos - %u total (+%u)",
+                                          busy, total, total - ROWS_VISIBLE);
+  else                          snprintf(buf, sizeof(buf), "%u activos - %u en total", busy, total);
   setTextIfChanged(lblCount, buf);
 }
 
