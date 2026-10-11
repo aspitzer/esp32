@@ -6,8 +6,17 @@ import { hasPaneFor } from "./actions.ts";
 /** Cuanto se mantiene el retained de un agente muerto antes de borrarlo. */
 const OFFLINE_TTL_MS = 10 * 60 * 1000;
 
+/** Un error sin eventos nuevos durante tanto rato ya no es noticia: la sesion te espera. */
+const ERROR_TTL_MS = 15 * 60 * 1000;
+
+/** Margen antes de dar por muerta una sesion que no esta en el registro. */
+const REGISTRY_GRACE_MS = 60 * 1000;
+
 const agents = new Map<string, AgentState>();
 const reapers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** Ultimo evento recibido por sesion, en ms. */
+const lastEvent = new Map<string, number>();
 
 /**
  * cwd por agente. Se queda AQUI, no viaja en el payload MQTT: la placa no lo
@@ -433,6 +442,7 @@ function upsert(h: HookBase, patch: Partial<AgentState>): AgentState {
   const sub = subIdOf(h);
 
   if (h.cwd) cwds.set(id, h.cwd);
+  lastEvent.set(id, Date.now());
   rememberTitle(id, h.transcript_path);
 
   if (sub) {
@@ -539,20 +549,27 @@ export function onStopFailure(h: HookStopFailure) {
   return upsert(h, { status: "error", tool: null, detail: h.error_type, lastError: h.error_type });
 }
 
+function forget(id: string) {
+  clearAgentState(id);
+  agents.delete(id);
+  own.delete(id);
+  bases.delete(id);
+  subs.delete(id);
+  pending.delete(id);
+  cwds.delete(id);
+  titles.delete(id);
+  lastEvent.delete(id);
+  const t = reapers.get(id);
+  if (t) clearTimeout(t);
+  reapers.delete(id);
+}
+
 export function onSessionEnd(h: HookBase) {
   const s = upsert(h, { status: "offline", tool: null, detail: null });
 
   // El retained de un agente muerto no puede quedarse para siempre.
   const timer = setTimeout(() => {
-    clearAgentState(s.id);
-    agents.delete(s.id);
-    own.delete(s.id);
-    bases.delete(s.id);
-    subs.delete(s.id);
-    pending.delete(s.id);
-    cwds.delete(s.id);
-    titles.delete(s.id);
-    reapers.delete(s.id);
+    forget(s.id);
     console.log(`[state] ${s.id} purgado tras ${OFFLINE_TTL_MS / 60000} min offline`);
   }, OFFLINE_TTL_MS);
   timer.unref?.();
@@ -561,6 +578,70 @@ export function onSessionEnd(h: HookBase) {
   return s;
 }
 
+/**
+ * Sesiones con proceso vivo, segun el registro de Claude Code
+ * (~/.claude/sessions/<pid>.json). null si no hay registro: entonces no se
+ * puede saber nada y no se purga nada.
+ */
+async function liveSessionIds(): Promise<Set<string> | null> {
+  const dir = `${process.env.HOME ?? ""}/.claude/sessions`;
+  const vivos = new Set<string>();
+  let hay = false;
+  try {
+    for await (const f of new Bun.Glob("*.json").scan({ cwd: dir, absolute: true })) {
+      hay = true;
+      try {
+        const d = (await Bun.file(f).json()) as { pid?: number; sessionId?: string };
+        if (!d.pid || !d.sessionId) continue;
+        try { process.kill(d.pid, 0); } catch (e) {
+          if ((e as NodeJS.ErrnoException).code !== "EPERM") continue;   // ESRCH: muerto
+        }
+        vivos.add(d.sessionId.replace(/-/g, "").slice(0, 8));
+      } catch { /* fichero a medio escribir */ }
+    }
+  } catch {
+    return null;
+  }
+  return hay ? vivos : null;
+}
+
+/**
+ * El estado solo cambia cuando llega un evento, y hay cosas que dejan de ser
+ * verdad sin que llegue ninguno:
+ *
+ *   - Una sesion que se cierra sin SessionEnd (pestaña cerrada, kill, crash)
+ *     se quedaba en pantalla para siempre. Se mira si su proceso sigue vivo.
+ *   - Un StopFailure deja la sesion en error hasta el siguiente evento, que
+ *     puede no llegar en dias si nadie le vuelve a escribir. Se veia un error
+ *     de hace cuatro dias en una sesion olvidada.
+ *   - Los subagentes que mueren sin avisar caducan en liveSubs, pero solo se
+ *     notaba al llegar otro evento del padre.
+ */
+export async function sweep(): Promise<void> {
+  const vivos = await liveSessionIds();
+  const ahora = Date.now();
+
+  for (const [id, s] of own) {
+    if (reapers.has(id)) continue;               // ya va camino de purgarse
+    const quieto = ahora - (lastEvent.get(id) ?? 0);
+
+    if (vivos && !vivos.has(id) && quieto > REGISTRY_GRACE_MS) {
+      forget(id);
+      console.log(`[state] ${id} purgado: su proceso ya no existe`);
+      continue;
+    }
+
+    if (s.status === "error" && quieto > ERROR_TTL_MS) {
+      own.set(id, { ...s, status: "idle", awaiting: true, detail: s.lastError ? `Fallo: ${s.lastError}` : "Termino con un fallo" });
+      republish(id);
+      console.log(`[state] ${id} error caducado -> te espera`);
+      continue;
+    }
+
+    const antes = subs.get(id)?.size ?? 0;
+    if (antes && liveSubs(id).length !== antes) republish(id);
+  }
+}
 export function setWaitingPermission(agentId: string, tool: string, summary: string) {
   const prev = own.get(agentId);
   if (!prev) return;
@@ -592,6 +673,7 @@ export async function seedFromDisk(maxAgeH = 12): Promise<number> {
   const home = process.env.HOME ?? "";
   const glob = new Bun.Glob("projects/*/*.jsonl");
   const corte = Date.now() - maxAgeH * 3600_000;
+  const vivos = await liveSessionIds();      // sin esto entraban y el barrido las purgaba al momento
   let n = 0;
 
   for await (const rel of glob.scan({ cwd: `${home}/.claude`, absolute: true })) {
@@ -603,6 +685,7 @@ export async function seedFromDisk(maxAgeH = 12): Promise<number> {
       const base = rel.replace(/\.jsonl$/, "");
       const id = (base.split("/").pop() ?? "").replace(/-/g, "").slice(0, 8);
       if (!id || own.has(id)) continue;
+      if (vivos && !vivos.has(id)) continue;
 
       // El cwd esta en las primeras lineas; no hace falta leer el fichero entero.
       let cwd: string | undefined;
@@ -616,6 +699,7 @@ export async function seedFromDisk(maxAgeH = 12): Promise<number> {
       const titulo = await readCustomTitle(rel);
       if (titulo) titles.set(id, titulo);
       if (cwd) cwds.set(id, cwd);
+      lastEvent.set(id, mtime);
 
       const carpeta = cwd ? (cwd.split("/").filter(Boolean).at(-1) ?? id) : id;
       own.set(id, {
