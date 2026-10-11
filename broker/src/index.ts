@@ -228,6 +228,11 @@ if (purged) console.log(`[bus ] ${purged} agente(s) fantasma limpiados de un arr
 const seeded = await state.seedFromDisk();
 console.log(`[bus ] ${seeded} sesion(es) recuperadas de los transcripts`);
 
+// Lo que deja de ser verdad sin que llegue ningun evento: sesiones cerradas
+// sin SessionEnd, errores viejos, subagentes muertos.
+await state.sweep();
+setInterval(() => void state.sweep().catch((e) => console.error("[state] sweep:", e)), 30_000).unref?.();
+
 console.log(`[http] hooks en http://${HOST}:${PORT}  (token ${TOKEN ? "exigido" : "NO configurado"})`);
 console.log(`[http] permisos ${PERMISSIONS_ENABLED ? "ACTIVADOS" : "desactivados (fase 1)"}`);
 
