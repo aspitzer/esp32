@@ -1,6 +1,7 @@
 #include "net.h"
 
 #include <ArduinoJson.h>
+#include <ESPmDNS.h>
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <time.h>
@@ -22,6 +23,14 @@ static bool     ntpStarted  = false;
 
 static char lwtTopic[64];
 
+// MQTT_HOST puede ser una IP o el nombre del Mac ("LAP-0191" o "LAP-0191.local").
+// El DNS del ESP32 no resuelve .local, asi que va por mDNS. Se cachea la IP y
+// solo se vuelve a resolver cuando falla una conexion: el DHCP puede cambiarla.
+static IPAddress brokerIp;
+static bool      brokerResolved = false;
+static bool      mdnsStarted    = false;
+static char      brokerIpStr[16] = "?";
+
 static PermReq  perm = {};
 static void (*permCb)() = nullptr;
 static char actionResult[64] = {0};
@@ -37,7 +46,7 @@ void netClearActionResult() { actionResult[0] = '\0'; }
 NetState netState() { return state; }
 int8_t   netRssi() { return WiFi.status() == WL_CONNECTED ? (int8_t)WiFi.RSSI() : 0; }
 uint8_t  netMqttAttempt() { return mqttAttempt; }
-const char *netIpMqtt() { return MQTT_HOST; }
+const char *netIpMqtt() { return brokerIpStr; }
 
 uint32_t netNextRetryIn() {
   const uint32_t now = millis();
@@ -140,21 +149,55 @@ static void onMessage(char *topic, uint8_t *payload, unsigned int len) {
 
 // --- conexion ----------------------------------------------------------------
 
+static bool resolveBroker() {
+  IPAddress ip;
+  if (ip.fromString(MQTT_HOST)) {
+    brokerIp = ip;
+  } else {
+    if (!mdnsStarted) mdnsStarted = MDNS.begin(DEVICE_ID);
+
+    char name[64];
+    strlcpy(name, MQTT_HOST, sizeof(name));
+    char *dot = strstr(name, ".local");
+    if (dot) *dot = '\0';
+
+    ip = mdnsStarted ? MDNS.queryHost(name, 2000) : IPAddress();
+    if (ip == IPAddress() && !WiFi.hostByName(MQTT_HOST, ip)) {
+      Serial.printf("[mqtt] no resuelvo %s\n", MQTT_HOST);
+      return false;
+    }
+    if (ip == IPAddress()) return false;
+    brokerIp = ip;
+  }
+  strlcpy(brokerIpStr, brokerIp.toString().c_str(), sizeof(brokerIpStr));
+  mqtt.setServer(brokerIp, MQTT_PORT);
+  Serial.printf("[mqtt] %s -> %s\n", MQTT_HOST, brokerIpStr);
+  brokerResolved = true;
+  return true;
+}
+
+static void mqttFail() {
+  mqttAttempt++;
+  mqttBackoff = min<uint32_t>(mqttBackoff * 2, MQTT_RETRY_MAX_MS);
+  mqttNextTry = millis() + mqttBackoff;
+  Serial.printf("[mqtt] fallo rc=%d (intento %u), reintento en %u ms\n",
+                mqtt.state(), mqttAttempt, mqttBackoff);
+  notifyChange();
+}
+
 static void mqttConnect() {
   char clientId[32];
   snprintf(clientId, sizeof(clientId), "%s-%04X", DEVICE_ID, (uint16_t)(ESP.getEfuseMac() & 0xFFFF));
 
   // LWT retained: si la placa se va, el broker lo sabe y deja de enrutarle
   // permisos. Es lo que hace seguro el fallback del lado del Mac.
+  if (!brokerResolved && !resolveBroker()) { mqttFail(); return; }
+
   const bool up = mqtt.connect(clientId, MQTT_USER, MQTT_PASS, lwtTopic, 1, true, "0");
 
   if (!up) {
-    mqttAttempt++;
-    mqttBackoff = min<uint32_t>(mqttBackoff * 2, MQTT_RETRY_MAX_MS);
-    mqttNextTry = millis() + mqttBackoff;
-    Serial.printf("[mqtt] fallo rc=%d (intento %u), reintento en %u ms\n",
-                  mqtt.state(), mqttAttempt, mqttBackoff);
-    notifyChange();
+    brokerResolved = false;   // quiza el Mac ha cambiado de IP
+    mqttFail();
     return;
   }
 
@@ -164,7 +207,7 @@ static void mqttConnect() {
   mqtt.subscribe("claude/agents/+/state", 1);
   mqtt.subscribe("claude/perm/req", 1);
   mqtt.subscribe("claude/action/res", 1);
-  Serial.printf("[mqtt] conectado a %s:%d como %s\n", MQTT_HOST, MQTT_PORT, clientId);
+  Serial.printf("[mqtt] conectado a %s (%s):%d como %s\n", MQTT_HOST, brokerIpStr, MQTT_PORT, clientId);
   setState(NET_MQTT_UP);
 }
 
@@ -176,7 +219,6 @@ void netInit() {
   WiFi.setAutoReconnect(true);
   WiFi.setSleep(true);           // ahorra ~20 mA y no afecta a la latencia de MQTT
 
-  mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setCallback(onMessage);
   mqtt.setBufferSize(MQTT_MAX_PACKET_SIZE);
   mqtt.setKeepAlive(MQTT_KEEPALIVE);
